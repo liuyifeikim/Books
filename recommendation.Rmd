@@ -1,0 +1,479 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r}
+x1 <- rnorm(30)
+x2 <- rnorm(30)
+x1
+x2
+Euc_dist <- dist(rbind(x1,x2) ,method="euclidean")
+Euc_dist
+```
+
+```{r}
+vec1 = c( 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0 )
+vec2 = c( 0, 0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0 )
+library(lsa)
+cosine(vec1,vec2)
+```
+
+```{r}
+Coef = cor(mtcars, method="pearson")
+Coef
+```
+
+```{r}
+data(USArrests)
+USArrests
+```
+
+```{r}
+apply(USArrests , 2, var)
+```
+
+```{r}
+pca = prcomp(USArrests, scale = TRUE)
+pca
+```
+
+```{r}
+names(pca)
+```
+
+```{r}
+pca$rotation
+```
+
+```{r}
+pca$rotation=-pca$rotation
+pca$x=-pca$x
+biplot (pca , scale =0)
+```
+
+```{r}
+library(cluster)
+data(iris)
+iris$Species = as.numeric(iris$Species)
+kmeans<- kmeans(x=iris, centers=5)
+clusplot(iris,kmeans$cluster, color=TRUE, shade=TRUE,labels=13,
+lines=0)
+```
+
+```{r}
+library(cluster)
+library(ggplot2)
+data(iris)
+iris$Species = as.numeric(iris$Species)
+cost_df <- data.frame()
+for(i in 1:100){
+  kmeans <- kmeans(x=iris, centers=i, iter.max=50)
+  cost_df <- rbind(cost_df, cbind(i, kmeans$tot.withinss))
+}
+names(cost_df) <- c("cluster", "cost")
+#Elbow method to identify the idle number of Cluster
+#Cost plot
+ggplot(data=cost_df, aes(x=cluster, y=cost, group=1)) +
+  theme_bw(base_family="Garamond") +
+  geom_line(colour = "darkgreen") +
+  theme(text = element_text(size=20)) +
+  ggtitle("Reduction In Cost For Values of 'k'\n") +
+  xlab("\nClusters") +
+  ylab("Within-Cluster Sum of Squares\n")
+```
+
+```{r}
+library(e1071)
+data(iris)
+sample = iris[sample(nrow(iris)),]
+train = sample[1:105,]
+test = sample[106:150,]
+tune =tune(svm,Species~.,
+           data=train,
+           kernel="radial",
+           scale=FALSE,
+           ranges=list(cost=c(0.001,0.01,0.1,1,5,10,100)))
+tune$best.model
+```
+
+```{r}
+summary(tune)
+```
+
+```{r}
+model = svm(Species~., data=train, kernel ="radial", cost=10, scale=FALSE)
+pred = predict(model,test)
+pred
+```
+
+```{r}
+library(tree)
+data(iris)
+sample = iris[sample(nrow(iris)),]
+train = sample[1:105,]
+test = sample[106:150,]
+model = tree(Species~.,train)
+summary(model)
+```
+
+```{r}
+library(randomForest)
+data(iris)
+sample = iris[sample(nrow(iris)),]
+train = sample[1:105,]
+test = sample[106:150,]
+model =randomForest(Species~.,data=train,mtry=2,importance=TRUE,proximity=TRUE)
+model
+```
+
+```{r}
+pred = predict(model,newdata=test[,-5])
+pred
+```
+
+```{r}
+library(gbm)
+data(iris)
+sample = iris[sample(nrow(iris)),]
+train = sample[1:105,]
+test = sample[106:150,]
+model = gbm(Species~.,data=train,distribution="multinomial",n.trees=5000,interaction.depth=4)
+summary(model)
+```
+
+```{r}
+pred = predict(model,newdata=test[,-5],n.trees=5000)
+pred[1:5,,]
+p.pred <- apply(pred,1,which.max)
+p.pred
+```
+
+```{r}
+library(recommenderlab)
+```
+
+```{r}
+data_package <- data(package = "recommenderlab")
+data_package$results[, "Item"]
+```
+
+```{r}
+data(MovieLense)
+MovieLense
+class(MovieLense)
+```
+
+```{r}
+methods(class = class(MovieLense))
+```
+
+```{r}
+object.size(MovieLense)
+object.size(as(MovieLense, "matrix"))
+```
+
+```{r}
+similarity_users <- similarity(MovieLense[1:4, ], method = "cosine", which = "users")
+similarity_users
+class(similarity_users)
+as.matrix(similarity_users)
+```
+
+```{r}
+image(as.matrix(similarity_users), main = "User similarity")
+```
+
+```{r}
+similarity_items <- similarity(MovieLense[, 1:4], method = "cosine", which = "items")
+as.matrix(similarity_items)
+```
+
+```{r}
+image(as.matrix(similarity_items), main = "Item similarity")
+```
+
+```{r}
+# 查看可用的算法
+recommender_models <- recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+names(recommender_models)
+```
+
+```{r}
+lapply(recommender_models, "[[", "description")
+```
+
+```{r}
+recommender_models$IBCF_realRatingMatrix$parameters
+```
+
+```{r}
+slotNames(MovieLense)
+```
+
+```{r}
+MovieLense@data
+dim(MovieLense@data)
+```
+
+```{r}
+vector_ratings <- as.vector(MovieLense@data)
+unique(vector_ratings)
+table_ratings <- table(vector_ratings)
+table_ratings
+```
+
+```{r}
+vector_ratings <- vector_ratings[vector_ratings != 0]
+vector_ratings <- factor(vector_ratings)
+vector_ratings
+levels(vector_ratings)
+```
+
+```{r}
+qplot(vector_ratings) + ggtitle("Distribution of the ratings")
+```
+
+```{r}
+views_per_movie <- colCounts(MovieLense)
+table_views <- data.frame(
+  movie = names(views_per_movie),
+  views = views_per_movie
+  )
+table_views <- table_views[order(table_views$views, decreasing = TRUE), ]
+table_views
+```
+
+```{r}
+ggplot(table_views[1:6, ], aes(x = movie, y = views)) +
+  geom_bar(stat="identity") + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  ggtitle("Number of views of the top movies")
+```
+
+```{r}
+average_ratings <- colMeans(MovieLense)
+qplot(average_ratings) + stat_bin(binwidth = 0.1) + ggtitle("Distribution of the average movie rating")
+```
+
+```{r}
+average_ratings_relevant <- average_ratings[views_per_movie > 100]
+qplot(average_ratings_relevant) + 
+  stat_bin(binwidth = 0.1) + 
+  ggtitle(paste("Distribution of the relevant average ratings"))
+```
+
+```{r}
+image(MovieLense, main = "Heatmap of the rating matrix")
+```
+
+```{r}
+image(MovieLense[1:10, 1:15], main = "Heatmap of the first rows and columns")
+```
+
+```{r}
+min_n_movies <- quantile(rowCounts(MovieLense), 0.99)
+min_n_users <- quantile(colCounts(MovieLense), 0.99)
+min_n_movies
+min_n_users
+```
+
+```{r}
+image(MovieLense[rowCounts(MovieLense) > min_n_movies, 
+                 colCounts(MovieLense) > min_n_users], 
+      main = "Heatmap of the top users and movies")
+```
+
+```{r}
+ratings_movies <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
+ratings_movies
+```
+
+```{r}
+min_movies <- quantile(rowCounts(ratings_movies), 0.98)
+min_users <- quantile(colCounts(ratings_movies), 0.98)
+min_movies
+min_users
+```
+
+```{r}
+image(ratings_movies[rowCounts(ratings_movies) > min_movies,
+colCounts(ratings_movies) > min_users], 
+main = "Heatmap of the topusers and movies")
+```
+
+```{r}
+average_ratings_per_user <- rowMeans(ratings_movies)
+qplot(average_ratings_per_user) + stat_bin(binwidth = 0.1) + ggtitle("Distribution of the average rating per user")
+```
+
+```{r}
+ratings_movies_norm <- normalize(ratings_movies)
+sum(rowMeans(ratings_movies_norm) > 0.00001)
+```
+
+```{r}
+image(ratings_movies_norm[rowCounts(ratings_movies_norm) > min_movies, colCounts(ratings_movies_norm) > min_users], main = "Heatmap of the top users and movies")
+```
+
+```{r}
+ratings_movies_watched <- binarize(ratings_movies, minRating = 1)
+min_movies_binary <- quantile(rowCounts(ratings_movies), 0.95)
+min_users_binary <- quantile(colCounts(ratings_movies), 0.95)
+```
+
+
+```{r}
+image(ratings_movies_watched[rowCounts(ratings_movies) > min_movies_binary,
+colCounts(ratings_movies) > min_users_binary], 
+main = "Heatmap of the top users and movies")
+```
+
+```{r}
+ratings_movies_good <- binarize(ratings_movies, minRating = 3)
+image(ratings_movies_good[rowCounts(ratings_movies) > min_movies_binary, 
+colCounts(ratings_movies) > min_users_binary], main = "Heatmap of the top users and movies")
+```
+
+```{r}
+which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings_movies), replace = TRUE, prob = c(0.8, 0.2))
+head(which_train)
+```
+
+```{r}
+ratings_movies
+```
+
+```{r}
+recc_data_train <- ratings_movies[which_train, ]
+recc_data_test <- ratings_movies[!which_train, ]
+recc_data_train
+recc_data_test
+```
+
+* Item-based collaborative filtering
+
+```{r}
+recommender_models <- recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommender_models$IBCF_realRatingMatrix$parameters
+```
+
+```{r}
+recc_model <- Recommender(data = recc_data_train, method = "IBCF", parameter = list(k = 30))
+recc_model
+class(recc_model)
+```
+
+```{r}
+model_details <- getModel(recc_model)
+model_details$description
+model_details$k
+```
+
+```{r}
+class(model_details$sim)
+dim(model_details$sim)
+```
+
+```{r}
+n_items_top <- 20
+image(model_details$sim[1:n_items_top, 1:n_items_top], main = "Heatmap of the first rows and columns")
+```
+
+```{r}
+model_details$k
+row_sums <- rowSums(model_details$sim > 0)
+table(row_sums)
+```
+
+
+```{r}
+col_sums <- colSums(model_details$sim > 0)
+qplot(col_sums) + stat_bin(binwidth = 1) + ggtitle("Distribution of the column count")
+```
+
+```{r}
+which_max <- order(col_sums, decreasing = TRUE)[1:6]
+rownames(model_details$sim)[which_max]
+```
+
+```{r}
+n_recommended <- 6
+recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended)
+recc_predicted
+class(recc_predicted)
+slotNames(recc_predicted)
+```
+
+```{r}
+recc_user_1 <- recc_predicted@items[[1]]
+recc_user_1
+movies_user_1 <- recc_predicted@itemLabels[recc_user_1]
+movies_user_1
+```
+
+```{r}
+recc_matrix <- sapply(recc_predicted@items, function(x){colnames(ratings_movies)[x]})
+dim(recc_matrix)
+recc_matrix[, 1:4]
+```
+
+```{r}
+number_of_items <- factor(table(recc_matrix))
+chart_title <- "Distribution of the number of items for IBCF"
+qplot(number_of_items) + ggtitle(chart_title)
+```
+
+```{r}
+number_of_items_sorted <- sort(number_of_items, decreasing = TRUE)
+number_of_items_top <- head(number_of_items_sorted, n = 4)
+table_top <- data.frame(names(number_of_items_top), number_of_items_top)
+table_top
+```
+
+* User-based collaborative filtering
+
+```{r}
+recommender_models <- recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommender_models$UBCF_realRatingMatrix$parameters
+```
+
+```{r}
+recc_model <- Recommender(data = recc_data_train, method = "UBCF")
+recc_model
+```
+
+```{r}
+model_details <- getModel(recc_model)
+names(model_details)
+```
+
+```{r}
+model_details$data
+```
+
+```{r}
+n_recommended <- 6
+recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended) 
+recc_predicted
+```
+
+```{r}
+recc_matrix <- sapply(recc_predicted@items, function(x){colnames(ratings_movies)[x]})
+dim(recc_matrix)
+recc_matrix[, 1:4]
+```
+
+```{r}
+number_of_items <- factor(table(recc_matrix))
+chart_title <- "Distribution of the number of items for UBCF"
+qplot(number_of_items) + ggtitle(chart_title)
+```
+
+```{r}
+number_of_items_sorted <- sort(number_of_items, decreasing = TRUE)
+number_of_items_top <- head(number_of_items_sorted, n = 4)
+table_top <- data.frame(names(number_of_items_top), number_of_items_top)
+table_top
+```
+
