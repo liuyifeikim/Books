@@ -149,14 +149,22 @@ p.pred <- apply(pred,1,which.max)
 p.pred
 ```
 
+
+
+* chapter 3 Recommender Systems
+
 ```{r}
 library(recommenderlab)
+library(ggplot2)
 ```
+
 
 ```{r}
 data_package <- data(package = "recommenderlab")
+data_package$results
 data_package$results[, "Item"]
 ```
+
 
 ```{r}
 data(MovieLense)
@@ -164,9 +172,11 @@ MovieLense
 class(MovieLense)
 ```
 
+
 ```{r}
 methods(class = class(MovieLense))
 ```
+
 
 ```{r}
 object.size(MovieLense)
@@ -174,7 +184,7 @@ object.size(as(MovieLense, "matrix"))
 ```
 
 ```{r}
-similarity_users <- similarity(MovieLense[1:4, ], method = "cosine", which = "users")
+similarity_users <- similarity(MovieLense[1:4, ], method = "cosine", which = "users") # 按照user计算相似度
 similarity_users
 class(similarity_users)
 as.matrix(similarity_users)
@@ -185,56 +195,72 @@ image(as.matrix(similarity_users), main = "User similarity")
 ```
 
 ```{r}
-similarity_items <- similarity(MovieLense[, 1:4], method = "cosine", which = "items")
+similarity_items <- similarity(MovieLense[, 1:4], method = "cosine", which = "items")  # 按照物品计算相似度
+similarity_items
 as.matrix(similarity_items)
 ```
+
 
 ```{r}
 image(as.matrix(similarity_items), main = "Item similarity")
 ```
 
+
 ```{r}
 # 查看可用的算法
-recommender_models <- recommenderRegistry$get_entries(dataType = "realRatingMatrix")
-names(recommender_models)
+recommender_models_real <- recommenderRegistry$get_entries(dataType = "realRatingMatrix")
+recommender_models_binary <- recommenderRegistry$get_entries(dataType = "binaryRatingMatrix")
+names(recommender_models_real)
+names(recommender_models_binary)
 ```
 
-```{r}
-lapply(recommender_models, "[[", "description")
-```
 
 ```{r}
-recommender_models$IBCF_realRatingMatrix$parameters
+lapply(recommender_models_real, "[[", "description")
 ```
 
+
 ```{r}
+recommender_models_real$IBCF_realRatingMatrix$parameters
+recommender_models_real$UBCF_realRatingMatrix$parameters
+```
+
+
+```{r}
+dim(MovieLense)
 slotNames(MovieLense)
 ```
+
 
 ```{r}
 MovieLense@data
 dim(MovieLense@data)
 ```
 
+
 ```{r}
 vector_ratings <- as.vector(MovieLense@data)
+vector_ratings[1:10]
 unique(vector_ratings)
 table_ratings <- table(vector_ratings)
 table_ratings
 ```
 
+
 ```{r}
 vector_ratings <- vector_ratings[vector_ratings != 0]
 vector_ratings <- factor(vector_ratings)
-vector_ratings
+vector_ratings[1:10]
 levels(vector_ratings)
 ```
+
 
 ```{r}
 qplot(vector_ratings) + ggtitle("Distribution of the ratings")
 ```
 
 ```{r}
+# 计算每部电影参与评分的人数
 views_per_movie <- colCounts(MovieLense)
 table_views <- data.frame(
   movie = names(views_per_movie),
@@ -245,18 +271,22 @@ table_views
 ```
 
 ```{r}
-ggplot(table_views[1:6, ], aes(x = movie, y = views)) +
+ggplot(table_views[1:6, ], aes(x = reorder(movie, -views), y = views)) +
   geom_bar(stat="identity") + 
   theme(axis.text.x = element_text(angle = 45, hjust = 1)) + 
   ggtitle("Number of views of the top movies")
 ```
 
 ```{r}
+# 平均得分分布
 average_ratings <- colMeans(MovieLense)
-qplot(average_ratings) + stat_bin(binwidth = 0.1) + ggtitle("Distribution of the average movie rating")
+qplot(average_ratings) + 
+  stat_bin(binwidth = 0.1) + 
+  ggtitle("Distribution of the average movie rating")
 ```
 
 ```{r}
+# 评分人数>100的电影
 average_ratings_relevant <- average_ratings[views_per_movie > 100]
 qplot(average_ratings_relevant) + 
   stat_bin(binwidth = 0.1) + 
@@ -272,10 +302,11 @@ image(MovieLense[1:10, 1:15], main = "Heatmap of the first rows and columns")
 ```
 
 ```{r}
+# 选择活跃用户和活跃物品
 min_n_movies <- quantile(rowCounts(MovieLense), 0.99)
-min_n_users <- quantile(colCounts(MovieLense), 0.99)
-min_n_movies
-min_n_users
+min_n_users <-  quantile(colCounts(MovieLense), 0.99)
+min_n_movies # 最高1%的用户看过441部以上电影
+min_n_users  # 最高1%的电影被371以上用户评分
 ```
 
 ```{r}
@@ -285,7 +316,8 @@ image(MovieLense[rowCounts(MovieLense) > min_n_movies,
 ```
 
 ```{r}
-ratings_movies <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
+ratings_movies <- MovieLense[rowCounts(MovieLense) > 50,    # 至少对50个电影评分的用户
+                             colCounts(MovieLense) > 100]   # 至少有100个用户评分的电影
 ratings_movies
 ```
 
@@ -298,89 +330,111 @@ min_users
 
 ```{r}
 image(ratings_movies[rowCounts(ratings_movies) > min_movies,
-colCounts(ratings_movies) > min_users], 
-main = "Heatmap of the topusers and movies")
+                     colCounts(ratings_movies) > min_users], 
+      main = "Heatmap of the topusers and movies")
 ```
 
 ```{r}
+# 每个用户的平均评分
 average_ratings_per_user <- rowMeans(ratings_movies)
-qplot(average_ratings_per_user) + stat_bin(binwidth = 0.1) + ggtitle("Distribution of the average rating per user")
+qplot(average_ratings_per_user) + 
+  stat_bin(binwidth = 0.1) + 
+  ggtitle("Distribution of the average rating per user")
 ```
 
 ```{r}
-ratings_movies_norm <- normalize(ratings_movies)
+# 评分标准化
+ratings_movies_norm <- normalize(ratings_movies) # 默认按行进行center标准化，使得每个用户的平均评分均值=0
 sum(rowMeans(ratings_movies_norm) > 0.00001)
 ```
 
 ```{r}
-image(ratings_movies_norm[rowCounts(ratings_movies_norm) > min_movies, colCounts(ratings_movies_norm) > min_users], main = "Heatmap of the top users and movies")
+image(ratings_movies_norm[rowCounts(ratings_movies_norm) > min_movies, 
+                          colCounts(ratings_movies_norm) > min_users], 
+      main = "Heatmap of the top users and movies")
 ```
 
 ```{r}
+# 评分二值化
 ratings_movies_watched <- binarize(ratings_movies, minRating = 1)
 min_movies_binary <- quantile(rowCounts(ratings_movies), 0.95)
 min_users_binary <- quantile(colCounts(ratings_movies), 0.95)
+min_movies_binary # 最高5%的用户对超过199部电影评分
+min_users_binary  # 最高5%的电影有超过308个用户进行评分
 ```
 
 
 ```{r}
 image(ratings_movies_watched[rowCounts(ratings_movies) > min_movies_binary,
-colCounts(ratings_movies) > min_users_binary], 
-main = "Heatmap of the top users and movies")
+                             colCounts(ratings_movies) > min_users_binary], 
+      main = "Heatmap of the top users and movies")
 ```
 
 ```{r}
+# 分为好评和差评
 ratings_movies_good <- binarize(ratings_movies, minRating = 3)
 image(ratings_movies_good[rowCounts(ratings_movies) > min_movies_binary, 
-colCounts(ratings_movies) > min_users_binary], main = "Heatmap of the top users and movies")
+                          colCounts(ratings_movies) > min_users_binary], 
+      main = "Heatmap of the top users and movies")
 ```
 
+
 ```{r}
-which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings_movies), replace = TRUE, prob = c(0.8, 0.2))
+set.seed(1)
+which_train <- sample(x = c(TRUE, FALSE), 
+                      size = nrow(ratings_movies), 
+                      replace = TRUE, 
+                      prob = c(0.8, 0.2))
 head(which_train)
 ```
 
-```{r}
-ratings_movies
-```
 
 ```{r}
+# 划分数据集
 recc_data_train <- ratings_movies[which_train, ]
 recc_data_test <- ratings_movies[!which_train, ]
 recc_data_train
 recc_data_test
 ```
 
+
 * Item-based collaborative filtering
 
 ```{r}
+# 查看算法信息
 recommender_models <- recommenderRegistry$get_entries(dataType = "realRatingMatrix")
 recommender_models$IBCF_realRatingMatrix$parameters
 ```
 
 ```{r}
-recc_model <- Recommender(data = recc_data_train, method = "IBCF", parameter = list(k = 30))
-recc_model
-class(recc_model)
+# 建立模型:IBCF
+recc_model_ibcf <- Recommender(data = recc_data_train, method = "IBCF", parameter = list(k = 30)) # 取30个近邻
+recc_model_ibcf
+class(recc_model_ibcf)
 ```
 
 ```{r}
-model_details <- getModel(recc_model)
+# 一些模型信息
+model_details <- getModel(recc_model_ibcf)
 model_details$description
 model_details$k
+model_details$normalize
 ```
 
 ```{r}
+# 物品之间的相似度矩阵
 class(model_details$sim)
 dim(model_details$sim)
 ```
 
 ```{r}
 n_items_top <- 20
-image(model_details$sim[1:n_items_top, 1:n_items_top], main = "Heatmap of the first rows and columns")
+image(model_details$sim[1:n_items_top, 1:n_items_top], 
+      main = "Heatmap of the first rows and columns")
 ```
 
 ```{r}
+# 每行只有30个空格有值，因为取了30个近邻
 model_details$k
 row_sums <- rowSums(model_details$sim > 0)
 table(row_sums)
@@ -388,17 +442,22 @@ table(row_sums)
 
 
 ```{r}
+# 某些电影会和很多电影都很相似，大量出现在其他电影的近邻当中
 col_sums <- colSums(model_details$sim > 0)
-qplot(col_sums) + stat_bin(binwidth = 1) + ggtitle("Distribution of the column count")
+qplot(col_sums) + 
+  stat_bin(binwidth = 1) + 
+  ggtitle("Distribution of the column count")
 ```
 
 ```{r}
-which_max <- order(col_sums, decreasing = TRUE)[1:6]
+# 与其他电影最多相似的电影
+which_max <- order(col_sums, decreasing = TRUE)[1:10]
 rownames(model_details$sim)[which_max]
 ```
 
 ```{r}
-n_recommended <- 6
+# 推荐阶段
+n_recommended <- 6 # 每个用户推荐6个物品
 recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended)
 recc_predicted
 class(recc_predicted)
@@ -406,30 +465,35 @@ slotNames(recc_predicted)
 ```
 
 ```{r}
+# 查看结果
 recc_user_1 <- recc_predicted@items[[1]]
-recc_user_1
+recc_user_1    # 输出编号
 movies_user_1 <- recc_predicted@itemLabels[recc_user_1]
-movies_user_1
+movies_user_1  # 输出名称
 ```
 
 ```{r}
+# 每个用户的推荐列表输出
 recc_matrix <- sapply(recc_predicted@items, function(x){colnames(ratings_movies)[x]})
 dim(recc_matrix)
 recc_matrix[, 1:4]
 ```
 
 ```{r}
+# 电影推荐次数分布
 number_of_items <- factor(table(recc_matrix))
 chart_title <- "Distribution of the number of items for IBCF"
 qplot(number_of_items) + ggtitle(chart_title)
 ```
 
 ```{r}
+# 推荐最多的电影
 number_of_items_sorted <- sort(number_of_items, decreasing = TRUE)
 number_of_items_top <- head(number_of_items_sorted, n = 4)
 table_top <- data.frame(names(number_of_items_top), number_of_items_top)
 table_top
 ```
+
 
 * User-based collaborative filtering
 
@@ -475,5 +539,574 @@ number_of_items_sorted <- sort(number_of_items, decreasing = TRUE)
 number_of_items_top <- head(number_of_items_sorted, n = 4)
 table_top <- data.frame(names(number_of_items_top), number_of_items_top)
 table_top
+```
+
+* Collaborative filtering on binary data
+
+```{r}
+library(ggplot2)
+library(recommenderlab)
+```
+
+
+```{r}
+ratings_movies_watched <- binarize(ratings_movies, minRating = 1)
+ratings_movies_watched
+```
+
+```{r}
+qplot(rowSums(ratings_movies_watched)) + 
+  stat_bin(binwidth = 10) + 
+  geom_vline(xintercept = mean(rowSums(ratings_movies_watched)), col = "red", linetype = "dashed") + 
+  ggtitle("Distribution of movies by user")
+```
+
+```{r}
+which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings_movies), replace = TRUE, prob = c(0.8, 0.2))
+recc_data_train <- ratings_movies[which_train, ]
+recc_data_test <- ratings_movies[!which_train, ]
+```
+
+
+```{r}
+recc_model <- Recommender(data = recc_data_train, method = "IBCF", parameter = list(method = "Jaccard"))
+model_details <- getModel(recc_model)
+```
+
+```{r}
+n_recommended <- 6
+recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended)
+recc_matrix <- sapply(recc_predicted@items, function(x){colnames(ratings_movies)[x]})
+recc_matrix[,1:4]
+```
+
+* User-based collaborative filtering on binary data
+
+```{r}
+recc_model <- Recommender(data = recc_data_train, method = "UBCF", parameter = list(method = "Jaccard"))
+```
+
+
+```{r}
+n_recommended <- 6
+recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended)
+recc_matrix <- sapply(recc_predicted@items, function(x){colnames(ratings_movies)[x]})
+dim(recc_matrix)
+recc_matrix[, 1:4]
+```
+
+* Evaluating the Recommender Systems
+
+```{r}
+library(recommenderlab)
+library(ggplot2)
+```
+
+
+```{r}
+data(MovieLense)
+ratings_movies <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
+ratings_movies
+```
+
+```{r}
+percentage_training <- 0.8
+min(rowCounts(ratings_movies))
+items_to_keep <- 15
+rating_threshold <- 3
+n_eval <- 1
+```
+
+```{r}
+eval_sets <- evaluationScheme(data = ratings_movies, 
+                              method = "split", 
+                              train = percentage_training, 
+                              given = items_to_keep, 
+                              goodRating = rating_threshold, 
+                              k = n_eval) 
+eval_sets
+```
+
+```{r}
+getData(eval_sets, "train")
+nrow(getData(eval_sets, "train")) / nrow(ratings_movies)
+```
+
+```{r}
+getData(eval_sets, "known")
+getData(eval_sets, "unknown")
+```
+
+```{r}
+nrow(getData(eval_sets, "known")) / nrow(ratings_movies)
+```
+
+```{r}
+unique(rowCounts(getData(eval_sets, "known")))
+```
+
+```{r}
+qplot(rowCounts(getData(eval_sets, "unknown"))) + geom_histogram(binwidth = 10) + ggtitle("unknown items by the users")
+```
+
+```{r}
+percentage_training <- 0.8
+items_to_keep <- 15
+rating_threshold <- 3
+n_eval <- 1
+eval_sets <- evaluationScheme(data = ratings_movies, 
+                              method = "bootstrap", 
+                              train = percentage_training, 
+                              given = items_to_keep, 
+                              goodRating = rating_threshold, 
+                              k = n_eval)
+```
+
+
+```{r}
+nrow(getData(eval_sets, "train")) / nrow(ratings_movies)
+```
+
+```{r}
+perc_test <- nrow(getData(eval_sets, "known")) / nrow(ratings_movies)
+perc_test
+```
+
+
+```{r}
+length(unique(eval_sets@runsTrain[[1]]))
+```
+
+```{r}
+perc_train <- length(unique(eval_sets@runsTrain[[1]])) / nrow(ratings_movies)
+perc_train + perc_test
+```
+
+```{r}
+table_train <- table(eval_sets@runsTrain[[1]])
+n_repetitions <- factor(as.vector(table_train))
+qplot(n_repetitions) + ggtitle("Number of repetitions in the training set")
+```
+
+```{r}
+n_fold <- 4
+eval_sets <- evaluationScheme(data = ratings_movies, 
+                              method = "cross-validation", 
+                              k = n_fold, 
+                              given = items_to_keep, 
+                              goodRating = rating_threshold)
+```
+
+
+```{r}
+size_sets <- sapply(eval_sets@runsTrain, length)
+size_sets
+```
+
+```{r}
+n_fold <- 4
+items_to_keep <- 15
+rating_threshold <- 3
+eval_sets <- evaluationScheme(data = ratings_movies, 
+                              method = "cross-validation", 
+                              k = n_fold, 
+                              given = items_to_keep, 
+                              goodRating = rating_threshold)
+eval_sets
+```
+
+
+```{r}
+model_to_evaluate <- "IBCF"
+model_parameters <- NULL
+eval_recommender <- Recommender(data = getData(eval_sets, "train"), method = model_to_evaluate, parameter = model_parameters)
+```
+
+```{r}
+items_to_recommend <- 10
+```
+
+
+```{r}
+eval_prediction <- predict(object = eval_recommender, 
+                           newdata = getData(eval_sets, "known"), 
+                           n = items_to_recommend, 
+                           type = "ratings")
+class(eval_prediction)
+```
+
+```{r}
+qplot(rowCounts(eval_prediction)) + geom_histogram(binwidth = 10) + ggtitle("Distribution of movies per user")
+```
+
+```{r}
+eval_accuracy <- calcPredictionAccuracy(x = eval_prediction, data = getData(eval_sets, "unknown"), byUser = TRUE)
+head(eval_accuracy)
+```
+
+```{r}
+qplot(eval_accuracy[, "RMSE"]) + geom_histogram(binwidth = 0.1) + ggtitle("Distribution of the RMSE by user")
+```
+
+```{r}
+eval_accuracy <- calcPredictionAccuracy(x = eval_prediction, 
+                                        data = getData(eval_sets, "unknown"), 
+                                        byUser = FALSE) 
+eval_accuracy
+```
+
+```{r}
+results <- evaluate(x = eval_sets, method = model_to_evaluate, n = seq(10, 100, 10))
+class(results)
+```
+
+```{r}
+head(getConfusionMatrix(results)[[1]])
+```
+
+```{r}
+columns_to_sum <- c("TP", "FP", "FN", "TN")
+indices_summed <- Reduce("+", getConfusionMatrix(results))[, columns_to_sum]
+head(indices_summed)
+```
+
+```{r}
+plot(results, annotate = TRUE, main = "ROC curve")
+plot(results, "prec/rec", annotate = TRUE, main = "Precision-recall")
+```
+
+```{r}
+models_to_evaluate <- list(
+  IBCF_cos = list(name = "IBCF", param = list(method = "cosine")),
+  IBCF_cor = list(name = "IBCF", param = list(method = "pearson")),
+  UBCF_cos = list(name = "UBCF", param = list(method = "cosine")),
+  UBCF_cor = list(name = "UBCF", param = list(method = "pearson")),
+  random = list(name = "RANDOM", param = NULL)
+)
+```
+
+```{r}
+n_recommendations <- c(1, 5, seq(10, 100, 10))
+n_recommendations
+```
+
+```{r}
+list_results <- evaluate(x = eval_sets, method = models_to_evaluate, n = n_recommendations)
+class(list_results)
+```
+
+```{r}
+class(list_results[[1]])
+```
+
+```{r}
+avg_matrices <- lapply(list_results, avg)
+head(avg_matrices$IBCF_cos[, 5:8])
+```
+
+```{r}
+plot(list_results, annotate = 1, legend = "topleft") 
+title("ROC curve")
+```
+
+```{r}
+vector_k <- c(5, 10, 20, 30, 40)
+models_to_evaluate <- lapply(vector_k, function(k){list(name = "IBCF", param = list(method = "cosine", k = k))})
+names(models_to_evaluate) <- paste0("IBCF_k_", vector_k)
+n_recommendations <- c(1, 5, seq(10, 100, 10))
+list_results <- evaluate(x = eval_sets, method = models_to_evaluate, n = n_recommendations)
+```
+
+```{r}
+plot(list_results, annotate = 1, legend = "topleft") 
+title("ROC curve")
+```
+
+```{r}
+plot(list_results, "prec/rec", annotate = 1, legend = "bottomright")
+title("Precision-recall")
+```
+
+```{r}
+library("data.table")
+library("ggplot2")
+library("recommenderlab")
+library("countrycode")
+```
+
+
+```{r}
+file_in <- "anonymous-msweb.test.txt" # https://github.com/wwells/CUNY_DATA_643/blob/master/TextBook/anonymous-msweb.test.txt
+table_in <- read.csv(file_in, header = FALSE)
+table_in
+```
+
+```{r}
+table_users <- table_in[, 1:2]
+table_users <- data.table(table_users)
+setnames(table_users, 1:2, c("category", "value"))
+table_users <- table_users[category %in% c("C", "V")]
+table_users
+```
+
+```{r}
+table_users[, chunk_user := cumsum(category == "C")]
+head(table_users)
+```
+
+```{r}
+table_long <- table_users[, list(user = value[1], item = value[-1]), by = "chunk_user"]
+head(table_long)
+```
+
+```{r}
+table_long[, value := 1]
+table_wide <- reshape(
+  data = table_long, 
+  direction = "wide",
+  idvar = "user",
+  timevar = "item",
+  v.names = "value")
+head(table_wide[, 1:5, with = FALSE])
+```
+
+```{r}
+vector_users <- table_wide[, user]
+table_wide[, user := NULL]
+table_wide[, chunk_user := NULL]
+table_wide
+```
+
+```{r}
+setnames(x = table_wide, old = names(table_wide), new = substring(names(table_wide), 7))
+table_wide
+```
+
+```{r}
+matrix_wide <- as.matrix(table_wide)
+rownames(matrix_wide) <- vector_users
+head(matrix_wide[, 1:6])
+```
+
+```{r}
+matrix_wide[is.na(matrix_wide)] <- 0
+ratings_matrix <- as(matrix_wide, "binaryRatingMatrix")
+ratings_matrix
+```
+
+```{r}
+image(ratings_matrix[1:50, 1:50], main = "Binary rating matrix")
+```
+
+```{r}
+n_users <- colCounts(ratings_matrix)
+qplot(n_users) + stat_bin(binwidth = 100) + ggtitle("Distribution of the number of users")
+```
+
+```{r}
+qplot(n_users[n_users < 100]) + stat_bin(binwidth = 10) + ggtitle("Distribution of the number of users")
+```
+
+```{r}
+ratings_matrix <- ratings_matrix[, colCounts(ratings_matrix) >= 5]
+ratings_matrix
+```
+
+```{r}
+sum(rowCounts(ratings_matrix) == 0)
+```
+
+```{r}
+ratings_matrix <- ratings_matrix[rowCounts(ratings_matrix) >= 5, ]
+ratings_matrix
+```
+
+```{r}
+table_in <- data.table(table_in)
+table_items <- table_in[V1 == "A"]
+head(table_items)
+```
+
+```{r}
+table_items <- table_items[, c(2, 4, 5), with = FALSE]
+setnames(table_items, 1:3, c("id", "description", "url"))
+table_items <- table_items[order(id)]
+head(table_items)
+```
+
+```{r}
+table_items[, category := "product"]
+```
+
+
+```{r}
+name_countries <- c(countryname_dict$country.name.en, "Taiwan", "UK", "Russia", "Venezuela", "Slovenija", "Caribbean", "Netherlands (Holland)", "Europe", "Central America", "MS North Africa")
+table_items[description %in% name_countries, category := "region"]
+```
+
+```{r}
+table_items[grepl("Region", description), category := "region"]
+head(table_items)
+```
+
+```{r}
+table_items[, list(n_items = .N), by = category]
+```
+
+```{r}
+which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings_matrix), replace = TRUE, prob = c(0.8, 0.2))
+recc_data_train <- ratings_matrix[which_train, ]
+recc_data_test <- ratings_matrix[!which_train, ]
+recc_data_train
+recc_data_test
+```
+
+```{r}
+recc_model <- Recommender(data = recc_data_train, method = "IBCF", parameter = list(method = "Jaccard"))
+```
+
+
+```{r}
+image(recc_model@model$sim)
+```
+
+```{r}
+dist_ratings <- as(recc_model@model$sim, "matrix")
+```
+
+```{r}
+dist_category <- table_items[, 1 - dist(category == "product")]
+class(dist_category)
+dist_category <- as(dist_category, "matrix")
+dist_category
+```
+
+```{r}
+dim(dist_category)
+dim(dist_ratings)
+```
+
+```{r}
+rownames(dist_category) <- table_items[, id]
+colnames(dist_category) <- table_items[, id]
+```
+
+```{r}
+vector_items <- rownames(dist_ratings)
+dist_category <- dist_category[vector_items, vector_items]
+dim(dist_category)
+```
+
+```{r}
+image(dist_category)
+```
+
+```{r}
+weight_category <- 0.25
+dist_tot <- dist_category * weight_category + dist_ratings * (1 - weight_category)
+image(dist_tot)
+```
+
+```{r}
+recc_model@model$sim <- as(dist_tot, "dgCMatrix")
+recc_model@model$sim <- as(dist_tot, "dgCMatrix")
+```
+
+```{r}
+n_recommended <- 10
+recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended)
+head(recc_predicted@itemLabels)
+```
+
+```{r}
+table_labels <- data.frame(id = recc_predicted@itemLabels)
+table_labels <- merge(table_labels, table_items, by = "id", all.x = TRUE, all.y = FALSE, sort = FALSE)
+descriptions <- as(table_labels$description, "character")
+head(table_labels)
+```
+
+```{r}
+recc_user_1 <- recc_predicted@items[[1]]
+items_user_1 <- descriptions[recc_user_1]
+head(items_user_1)
+```
+
+```{r}
+recc_matrix <- sapply(recc_predicted@items, function(x){
+  recommended <- descriptions[x]
+  c(recommended, rep("", n_recommended - length(recommended)))
+  })
+dim(recc_matrix)
+```
+
+```{r}
+head(recc_matrix[, 1:3])
+```
+
+```{r}
+table_recomm_per_item <- table(recc_matrix)
+recomm_per_item <- as(table_recomm_per_item, "numeric")
+bin_recomm_per_item <- cut(recomm_per_item, breaks = c(0, 10, 20, 100, max(recomm_per_item)))
+qplot(bin_recomm_per_item) + ggtitle("Recommendations per item")
+```
+
+```{r}
+evaluateModel <- function(
+  # data inputs
+  ratings_matrix, # rating matrix
+  table_items, # item description table
+  # K-fold parameters
+  n_fold = 10, # number of folds
+  items_to_keep = 4, # number of items to keep in the test set
+  # model parameters
+  number_neighbors = 30, # number of nearest neighbors
+  weight_description = 0.2, # weight to the item description-based distance
+  items_to_recommend = 10 # number of items to recommend
+  ){
+  
+  set.seed(1)
+  eval_sets <- evaluationScheme(data = ratings_matrix, method = "cross-validation", k = n_fold, given = items_to_keep)
+  
+  recc_model <- Recommender(data = getData(eval_sets, "train"),method = "IBCF",parameter = list(method = "Jaccard",k = number_neighbors))
+  
+  dist_ratings <- as(recc_model@model$sim, "matrix")
+  vector_items <- rownames(dist_ratings)
+  
+  dist_category <- table_items[, 1 - as.matrix(dist(category == "product"))]
+  rownames(dist_category) <- table_items[, id]
+  colnames(dist_category) <- table_items[, id]
+  dist_category <- dist_category[vector_items, vector_items]
+  
+  dist_tot <- dist_category * weight_description + dist_ratings * (1 - weight_description)
+  recc_model@model$sim <- as(dist_tot, "dgCMatrix")
+  
+  eval_prediction <- predict(object = recc_model, newdata = getData(eval_sets, "known"), n = items_to_recommend, type = "topNList")
+  
+  return(eval_accuracy)
+  }
+```
+
+
+```{r}
+model_evaluation <- evaluateModel(ratings_matrix = ratings_matrix, table_items = table_items)
+model_evaluation
+```
+
+```{r}
+nn_to_test <- seq(4, 80, by = 2)
+list_performance <- lapply(X = nn_to_test,
+                           FUN = function(nn){evaluateModel(ratings_matrix = ratings_matrix,
+                                                            table_items = table_items,
+                                                            number_neighbors = nn,
+                                                            weight_description = 0)
+                             })
+```
+
+```{r}
+list_performance[[1]]
+```
+
+```{r}
+sapply(list_performance, "[[", "precision")^t
 ```
 
