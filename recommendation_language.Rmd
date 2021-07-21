@@ -1,0 +1,245 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r, message=FALSE}
+library(tidyverse)
+library(recommenderlab)
+```
+
+# 数据读入与转化
+
+```{r}
+survey_2019 <- read_csv("../../DATA/developer_survey_2019/survey_results_public.csv")
+survey_2019
+```
+
+```{r}
+# 处理为宽数据
+survey_2019 %>% 
+  select(Respondent, LanguageWorkedWith) %>%
+  separate_rows(LanguageWorkedWith,sep = ";") %>% 
+  count(Respondent, LanguageWorkedWith) %>%  
+  pivot_wider(id_cols = Respondent, names_from = LanguageWorkedWith, values_from = n, values_fill = 0) %>% 
+  select(-Respondent) %>% 
+  as.matrix() -> language_matrix
+
+# 设定行名
+rownames(language_matrix) <- survey_2019$Respondent
+language_matrix[1:10, 1:10]
+```
+
+```{r}
+# 矩阵转化
+lang_binary_mat <- as(language_matrix, "binaryRatingMatrix")
+lang_binary_mat
+```
+
+# 数据探索:
+看用户及物品分布
+确定两者的“活跃值”
+
+
+```{r}
+# 用户使用语言数分布
+n_langs <- rowSums(lang_binary_mat)
+ggplot(as.data.frame(n_langs), aes(n_langs)) + geom_histogram()
+```
+
+```{r}
+# 各语言用户数分布
+n_users <- colSums(lang_binary_mat)
+ggplot(as.data.frame(n_users), aes(n_users)) + geom_histogram()
+```
+
+```{r}
+table(n_langs)
+table(n_users)
+```
+
+```{r}
+# 保留最相关数据
+lang_binary_mat_rele <- lang_binary_mat[rowSums(lang_binary_mat) >= 5,
+                                        colSums(lang_binary_mat) >= 1000]
+lang_binary_mat_rele
+```
+
+
+```{r}
+# 划分数据集
+set.seed(1)
+which_train <- sample(x = c(TRUE, FALSE), 
+                      size = nrow(lang_binary_mat_rele), 
+                      replace = TRUE, 
+                      prob = c(0.8, 0.2))
+lang_train <- lang_binary_mat_rele[which_train,]
+lang_test <- lang_binary_mat_rele[!which_train,]
+lang_train
+lang_test
+```
+
+# 建立推荐系统
+
+```{r}
+# 算法信息
+recommenderRegistry$get_entries(dataType = "binaryRatingMatrix")$IBCF_binaryRatingMatrix$parameters
+recommenderRegistry$get_entries(dataType = "binaryRatingMatrix")$UBCF_binaryRatingMatrix$parameters
+
+```
+
+
+```{r}
+# 建立IBCF模型
+lang_rec_ibcf <- Recommender(data = lang_train, method = "IBCF", parameter = list(k = 30)) # k值可以比训练数据总列数大
+lang_rec_ibcf
+```
+
+```{r}
+# 推荐结果
+lang_rec_ibcf_predict <- predict(object = lang_rec_ibcf, newdata = lang_test, n = 2)
+lang_rec_ibcf_predict
+```
+
+```{r}
+# 结果详细信息
+lang_rec_ibcf_predict@items[1:5]
+lang_rec_ibcf_predict@ratings[1:5]
+lang_rec_ibcf_predict@itemLabels
+lang_rec_ibcf_predict@n
+```
+
+
+```{r}
+# 每个用户的推荐列表输出
+lang_rec_ibcf_predict_list <- sapply(lang_rec_ibcf_predict@items, function(x){colnames(lang_binary_mat)[x]})
+lang_rec_ibcf_predict_list %>% 
+  tibble() %>% 
+  mutate(Respondent = rownames(lang_test)) %>% 
+  unnest(cols = c(.)) %>% 
+  rename("recommend" = ".") -> lang_rec_ibcf_predict_tib
+
+# 查看结果
+lang_rec_ibcf_predict_tib
+lang_rec_ibcf_predict_tib %>% count(recommend, sort = TRUE)
+```
+
+```{r}
+# 建立UBCF模型
+lang_rec_ubcf <- Recommender(data = lang_train, method = "UBCF")
+lang_rec_ubcf
+```
+
+```{r}
+# 推荐结果，速度明显比ibcf慢
+lang_rec_ubcf_predict <- predict(object = lang_rec_ubcf, newdata = lang_test, n = 2)
+lang_rec_ubcf_predict
+```
+
+```{r}
+# 结果详细信息
+lang_rec_ubcf_predict@items[1:5]
+lang_rec_ubcf_predict@ratings[1:5]
+lang_rec_ubcf_predict@itemLabels
+lang_rec_ubcf_predict@n
+```
+
+```{r}
+# 每个用户的推荐列表输出
+lang_rec_ubcf_predict_list <- sapply(lang_rec_ubcf_predict@items, function(x){colnames(lang_binary_mat)[x]})
+
+# 将推荐结果放在一个格子中
+# lang_rec_ubcf_predict_list %>% 
+#   tibble() %>% 
+#   mutate(Respondent = as.integer(rownames(lang_test))) %>% 
+#   rename("recommend" = ".") %>% 
+#   unnest(recommend) %>% 
+#   group_by(Respondent) %>% 
+#   summarise(recommend = toString(recommend)) -> lang_rec_ubcf_predict_tib
+
+lang_rec_ubcf_predict_list %>% 
+  tibble() %>% 
+  mutate(Respondent = as.integer(rownames(lang_test))) %>% 
+  rename("recommend" = ".") %>% 
+  unnest(recommend) -> lang_rec_ubcf_predict_tib
+
+# 查看结果
+lang_rec_ubcf_predict_tib
+lang_rec_ubcf_predict_tib %>% count(recommend, sort = TRUE)
+```
+
+# 结果检验
+
+```{r}
+# K折交叉检验方案
+eval_kfold <- evaluationScheme(
+  data = lang_train, 
+  method = "cross-validation", 
+  k = 5, 
+  given = 3 # 使用3个物品建立模型
+  )
+
+# 查看结果
+eval_kfold
+sapply(eval_kfold@runsTrain, length)
+getData(eval_kfold, "train")
+getData(eval_kfold, "known")
+getData(eval_kfold, "unknown")
+```
+
+```{r}
+# 评估推荐物品的准确程度
+eval_kfold_results <- evaluate(
+  x = eval_kfold,
+  method = "IBCF", 
+  n = c(1, 2, 3)
+  ) 
+
+# 查看结果
+eval_kfold_results
+```
+
+```{r}
+# 混淆矩阵
+getConfusionMatrix(eval_kfold_results)
+eval_kfold_results %>% avg() # 求k折的均值
+```
+
+```{r}
+# 待评估模型
+eval_recommender_ibcf <- Recommender(
+  data = getData(eval_kfold, "train"),
+  method = "IBCF", 
+  parameter = list(k = 30)
+  )
+
+# 查看结果
+eval_recommender_ibcf
+```
+
+```{r}
+# 推荐结果
+eval_recommender_ibcf_prediction <- predict(
+  object = eval_recommender_ibcf,
+  newdata = getData(eval_kfold, "known"),
+  n = 2, # 推荐2个结果
+  type = "topNList"
+  )
+
+# 查看结果
+eval_recommender_ibcf_prediction
+```
+
+```{r}
+# 评估结果
+eval_recommender_ibcf_result <- calcPredictionAccuracy(
+  x = eval_recommender_ibcf_prediction, 
+  data = getData(eval_kfold, "unknown"), 
+  byUser = FALSE,
+  given = 2 # 评估2个结果
+  )
+
+# 查看结果
+eval_recommender_ibcf_result
+```
+
