@@ -39,17 +39,17 @@ lang_binary_mat
 # 数据探索:
 看用户及物品分布
 确定两者的“活跃值”
-
+缩小矩阵规模
 
 ```{r}
 # 用户使用语言数分布
-n_langs <- rowSums(lang_binary_mat)
+n_langs <- rowCounts(lang_binary_mat)
 ggplot(as.data.frame(n_langs), aes(n_langs)) + geom_histogram()
 ```
 
 ```{r}
 # 各语言用户数分布
-n_users <- colSums(lang_binary_mat)
+n_users <- colCounts(lang_binary_mat)
 ggplot(as.data.frame(n_users), aes(n_users)) + geom_histogram()
 ```
 
@@ -60,11 +60,11 @@ table(n_users)
 
 ```{r}
 # 保留最相关数据
-lang_binary_mat_rele <- lang_binary_mat[rowSums(lang_binary_mat) >= 5,
-                                        colSums(lang_binary_mat) >= 1000]
+lang_binary_mat_rele <- lang_binary_mat[rowCounts(lang_binary_mat) >= 5, colCounts(lang_binary_mat) >= 1000]
 lang_binary_mat_rele
+min(rowCounts(lang_binary_mat_rele))  # 列筛选结果有可能影响行
+min(colCounts(lang_binary_mat_rele))
 ```
-
 
 ```{r}
 # 划分数据集
@@ -73,11 +73,13 @@ which_train <- sample(x = c(TRUE, FALSE),
                       size = nrow(lang_binary_mat_rele), 
                       replace = TRUE, 
                       prob = c(0.8, 0.2))
+table(which_train)
 lang_train <- lang_binary_mat_rele[which_train,]
 lang_test <- lang_binary_mat_rele[!which_train,]
 lang_train
 lang_test
 ```
+
 
 # 建立推荐系统
 
@@ -171,12 +173,18 @@ lang_rec_ubcf_predict_tib %>% count(recommend, sort = TRUE)
 # 结果检验
 
 ```{r}
+library(tidyverse)
+library(recommenderlab)
+```
+
+
+```{r}
 # K折交叉检验方案
 eval_kfold <- evaluationScheme(
   data = lang_train, 
   method = "cross-validation", 
   k = 5, 
-  given = 3 # 使用3个物品建立模型
+  given = 3  # 使用3个物品建立模型,结果中的N = 矩阵列数-given数
   )
 
 # 查看结果

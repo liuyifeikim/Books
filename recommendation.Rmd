@@ -621,6 +621,8 @@ library(ggplot2)
 data(MovieLense)
 ratings_movies <- MovieLense[rowCounts(MovieLense) > 50, colCounts(MovieLense) > 100]
 ratings_movies
+min(rowCounts(ratings_movies))
+min(colCounts(ratings_movies))
 ```
 
 ```{r}
@@ -910,6 +912,7 @@ table_in
 ```
 
 ```{r}
+# 筛选需要的数据
 table_users <- table_in[, 1:2]
 table_users <- data.table(table_users)
 setnames(table_users, 1:2, c("category", "value"))
@@ -918,16 +921,19 @@ table_users
 ```
 
 ```{r}
+# 标记同一个用户
 table_users[, chunk_user := cumsum(category == "C")]
-head(table_users)
+table_users
 ```
 
 ```{r}
+# 将用户和评价分开
 table_long <- table_users[, list(user = value[1], item = value[-1]), by = "chunk_user"]
-head(table_long)
+table_long
 ```
 
 ```{r}
+# 构建评分矩阵
 table_long[, value := 1]
 table_wide <- reshape(
   data = table_long, 
@@ -935,10 +941,11 @@ table_wide <- reshape(
   idvar = "user",
   timevar = "item",
   v.names = "value")
-head(table_wide[, 1:5, with = FALSE])
+table_wide[, 1:5, with = FALSE]
 ```
 
 ```{r}
+# 删除不需要的信息
 vector_users <- table_wide[, user]
 table_wide[, user := NULL]
 table_wide[, chunk_user := NULL]
@@ -946,17 +953,20 @@ table_wide
 ```
 
 ```{r}
+# 修改列名
 setnames(x = table_wide, old = names(table_wide), new = substring(names(table_wide), 7))
 table_wide
 ```
 
 ```{r}
+# 形成矩阵
 matrix_wide <- as.matrix(table_wide)
 rownames(matrix_wide) <- vector_users
 head(matrix_wide[, 1:6])
 ```
 
 ```{r}
+# 用0替换缺失值并转化格式
 matrix_wide[is.na(matrix_wide)] <- 0
 ratings_matrix <- as(matrix_wide, "binaryRatingMatrix")
 ratings_matrix
@@ -976,6 +986,7 @@ qplot(n_users[n_users < 100]) + stat_bin(binwidth = 10) + ggtitle("Distribution 
 ```
 
 ```{r}
+# 保留评分用户 >= 5的物品记录
 ratings_matrix <- ratings_matrix[, colCounts(ratings_matrix) >= 5]
 ratings_matrix
 ```
@@ -985,21 +996,23 @@ sum(rowCounts(ratings_matrix) == 0)
 ```
 
 ```{r}
+# 保留评分物品 >= 5的用户记录
 ratings_matrix <- ratings_matrix[rowCounts(ratings_matrix) >= 5, ]
 ratings_matrix
 ```
 
 ```{r}
+# 处理描述数据
 table_in <- data.table(table_in)
 table_items <- table_in[V1 == "A"]
-head(table_items)
+table_items
 ```
 
 ```{r}
 table_items <- table_items[, c(2, 4, 5), with = FALSE]
 setnames(table_items, 1:3, c("id", "description", "url"))
 table_items <- table_items[order(id)]
-head(table_items)
+table_items
 ```
 
 ```{r}
@@ -1008,13 +1021,15 @@ table_items[, category := "product"]
 
 
 ```{r}
-name_countries <- c(countryname_dict$country.name.en, "Taiwan", "UK", "Russia", "Venezuela", "Slovenija", "Caribbean", "Netherlands (Holland)", "Europe", "Central America", "MS North Africa")
+name_countries <- c(countryname_dict$country.name.en, "Taiwan", "UK", "Russia", "Venezuela", "Slovenija",
+                    "Caribbean", "Netherlands (Holland)", "Europe", "Central America", "MS North Africa")
 table_items[description %in% name_countries, category := "region"]
 ```
 
+
 ```{r}
 table_items[grepl("Region", description), category := "region"]
-head(table_items)
+table_items
 ```
 
 ```{r}
@@ -1022,6 +1037,7 @@ table_items[, list(n_items = .N), by = category]
 ```
 
 ```{r}
+# 划分数据集
 which_train <- sample(x = c(TRUE, FALSE), size = nrow(ratings_matrix), replace = TRUE, prob = c(0.8, 0.2))
 recc_data_train <- ratings_matrix[which_train, ]
 recc_data_test <- ratings_matrix[!which_train, ]
@@ -1030,6 +1046,7 @@ recc_data_test
 ```
 
 ```{r}
+# 建立IBCF
 recc_model <- Recommender(data = recc_data_train, method = "IBCF", parameter = list(method = "Jaccard"))
 ```
 
@@ -1039,15 +1056,17 @@ image(recc_model@model$sim)
 ```
 
 ```{r}
+# 构建评分矩阵
 dist_ratings <- as(recc_model@model$sim, "matrix")
 ```
 
+
 ```{r}
-dist_category <- table_items[, 1 - dist(category == "product")]
-class(dist_category)
+# 构建物品描述矩阵
+dist_category <- table_items[, 1 - dist(category == "product")] # category相同即为相似
 dist_category <- as(dist_category, "matrix")
-dist_category
 ```
+
 
 ```{r}
 dim(dist_category)
@@ -1055,14 +1074,19 @@ dim(dist_ratings)
 ```
 
 ```{r}
+# 修改行列名
 rownames(dist_category) <- table_items[, id]
 colnames(dist_category) <- table_items[, id]
 ```
 
 ```{r}
+# 使两个矩阵的维度保持一致
 vector_items <- rownames(dist_ratings)
 dist_category <- dist_category[vector_items, vector_items]
 dim(dist_category)
+identical(dim(dist_category), dim(dist_ratings))
+identical(rownames(dist_category), rownames(dist_ratings))
+identical(colnames(dist_category), colnames(dist_ratings))
 ```
 
 ```{r}
@@ -1070,17 +1094,20 @@ image(dist_category)
 ```
 
 ```{r}
+# 矩阵权重调整并相结合
 weight_category <- 0.25
 dist_tot <- dist_category * weight_category + dist_ratings * (1 - weight_category)
 image(dist_tot)
 ```
 
 ```{r}
-recc_model@model$sim <- as(dist_tot, "dgCMatrix")
+# 将矩阵放入模型当中
 recc_model@model$sim <- as(dist_tot, "dgCMatrix")
 ```
 
+
 ```{r}
+# 在测试集上运行
 n_recommended <- 10
 recc_predicted <- predict(object = recc_model, newdata = recc_data_test, n = n_recommended)
 head(recc_predicted@itemLabels)
