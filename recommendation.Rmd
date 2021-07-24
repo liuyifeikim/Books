@@ -897,6 +897,8 @@ plot(list_results, "prec/rec", annotate = 1, legend = "bottomright")
 title("Precision-recall")
 ```
 
+# Case Study – Building Your Own Recommendation Engine
+
 ```{r}
 library("data.table")
 library("ggplot2")
@@ -1114,19 +1116,22 @@ head(recc_predicted@itemLabels)
 ```
 
 ```{r}
+# 处理描述信息
 table_labels <- data.frame(id = recc_predicted@itemLabels)
 table_labels <- merge(table_labels, table_items, by = "id", all.x = TRUE, all.y = FALSE, sort = FALSE)
 descriptions <- as(table_labels$description, "character")
-head(table_labels)
+table_labels
 ```
 
 ```{r}
+# 将description放入推荐结果，而不是显示item的id
 recc_user_1 <- recc_predicted@items[[1]]
 items_user_1 <- descriptions[recc_user_1]
 head(items_user_1)
 ```
 
 ```{r}
+# 输出全部推荐结果
 recc_matrix <- sapply(recc_predicted@items, function(x){
   recommended <- descriptions[x]
   c(recommended, rep("", n_recommended - length(recommended)))
@@ -1135,10 +1140,11 @@ dim(recc_matrix)
 ```
 
 ```{r}
-head(recc_matrix[, 1:3])
+recc_matrix[, 1:3]
 ```
 
 ```{r}
+# 结果探索
 table_recomm_per_item <- table(recc_matrix)
 recomm_per_item <- as(table_recomm_per_item, "numeric")
 bin_recomm_per_item <- cut(recomm_per_item, breaks = c(0, 10, 20, 100, max(recomm_per_item)))
@@ -1146,48 +1152,80 @@ qplot(bin_recomm_per_item) + ggtitle("Recommendations per item")
 ```
 
 ```{r}
+# 被推荐最多的物品
+recomm_per_item_sorted <- sort(table_recomm_per_item, decreasing = TRUE)
+recomm_per_item_top <- head(recomm_per_item_sorted, n = 4)
+table_top <- data.frame(name = names(recomm_per_item_top), n_recomm = recomm_per_item_top)
+table_top
+```
+
+
+```{r}
+# 性能检验函数
 evaluateModel <- function(
+  
   # data inputs
-  ratings_matrix, # rating matrix
-  table_items, # item description table
+  ratings_matrix,           # rating matrix
+  table_items,              # item description table
+  
   # K-fold parameters
-  n_fold = 10, # number of folds
-  items_to_keep = 4, # number of items to keep in the test set
+  n_fold = 10,              # number of folds
+  items_to_keep = 4,        # number of items to keep in the test set
+  
   # model parameters
-  number_neighbors = 30, # number of nearest neighbors
+  number_neighbors = 30,    # number of nearest neighbors
   weight_description = 0.2, # weight to the item description-based distance
-  items_to_recommend = 10 # number of items to recommend
+  items_to_recommend = 10   # number of items to recommend
   ){
   
+  # build and evaluate the model
+  
+  # 检验方案设定
   set.seed(1)
-  eval_sets <- evaluationScheme(data = ratings_matrix, method = "cross-validation", k = n_fold, given = items_to_keep)
+  eval_sets <- evaluationScheme(data = ratings_matrix, method = "cross-validation", 
+                                k = n_fold, given = items_to_keep)
   
-  recc_model <- Recommender(data = getData(eval_sets, "train"),method = "IBCF",parameter = list(method = "Jaccard",k = number_neighbors))
+  # 模型设定
+  recc_model <- Recommender(data = getData(eval_sets, "train"), method = "IBCF",
+                            parameter = list(method = "Jaccard", k = number_neighbors))
   
+  # 提取评分矩阵
   dist_ratings <- as(recc_model@model$sim, "matrix")
   vector_items <- rownames(dist_ratings)
   
+  # 提取描述矩阵
   dist_category <- table_items[, 1 - as.matrix(dist(category == "product"))]
   rownames(dist_category) <- table_items[, id]
   colnames(dist_category) <- table_items[, id]
   dist_category <- dist_category[vector_items, vector_items]
   
+  # 合并矩阵
   dist_tot <- dist_category * weight_description + dist_ratings * (1 - weight_description)
   recc_model@model$sim <- as(dist_tot, "dgCMatrix")
   
-  eval_prediction <- predict(object = recc_model, newdata = getData(eval_sets, "known"), n = items_to_recommend, type = "topNList")
+  # 结果预测
+  eval_prediction <- predict(object = recc_model, newdata = getData(eval_sets, "known"), 
+                             n = items_to_recommend, type = "topNList")
   
+  # 性能评估
+  eval_accuracy <- calcPredictionAccuracy(x = eval_prediction, data = getData(eval_sets, "unknown"),
+                                          byUser = FALSE, given = items_to_recommend)
+  
+  # 返回结果
   return(eval_accuracy)
+  
   }
 ```
 
 
 ```{r}
+# 运行结果
 model_evaluation <- evaluateModel(ratings_matrix = ratings_matrix, table_items = table_items)
 model_evaluation
 ```
 
 ```{r}
+# 评估近邻数
 nn_to_test <- seq(4, 80, by = 2)
 list_performance <- lapply(X = nn_to_test,
                            FUN = function(nn){evaluateModel(ratings_matrix = ratings_matrix,
@@ -1197,11 +1235,74 @@ list_performance <- lapply(X = nn_to_test,
                              })
 ```
 
+
 ```{r}
+# 查看结果
 list_performance[[1]]
 ```
 
 ```{r}
-sapply(list_performance, "[[", "precision")^t
+# 提取precision
+sapply(list_performance, "[[", "precision")
+```
+
+```{r}
+# 结果数据汇总
+table_performance <- data.table(
+  nn = nn_to_test,
+  precision = sapply(list_performance, "[[", "precision"),
+  recall = sapply(list_performance, "[[", "recall")
+  )
+weight_precision <- 0.5
+table_performance[,performance := precision * weight_precision + recall * (1 - weight_precision)]
+table_performance
+```
+
+```{r}
+convertIntoPercent <- function(x){paste0(round(x * 100), "%")}
+qplot(table_performance[, nn], table_performance[, precision]) + geom_smooth() + scale_y_continuous(labels = convertIntoPercent)
+```
+
+```{r}
+qplot(table_performance[, nn], table_performance[, recall]) + geom_smooth() + scale_y_continuous(labels = convertIntoPercent)
+```
+
+```{r}
+qplot(table_performance[, nn], table_performance[, performance]) + geom_smooth() + scale_y_continuous(labels = convertIntoPercent)
+```
+
+```{r}
+# 最优k值
+row_best <- which.max(table_performance$performance)
+number_neighbors_opt <- table_performance[row_best, nn]
+number_neighbors_opt
+```
+
+```{r}
+# 调整矩阵权重
+wd_to_try <- seq(0, 1, by = 0.05)
+list_performance <- lapply(X = wd_to_try, 
+                           FUN = function(wd){evaluateModel(ratings_matrix = ratings_matrix,
+                                                            table_items = table_items,
+                                                            number_neighbors = number_neighbors_opt,
+                                                            weight_description = wd)
+                             })
+```
+
+
+```{r}
+table_performance <- data.table(
+  wd = wd_to_try,
+  precision = sapply(list_performance, "[[", "precision"),
+  recall = sapply(list_performance, "[[", "recall")
+  )
+table_performance[, performance := precision * weight_precision + recall * (1 - weight_precision)]
+```
+
+
+```{r}
+qplot(table_performance[, wd], table_performance[, performance]) + 
+  geom_smooth() + 
+  scale_y_continuous(labels = convertIntoPercent)
 ```
 
