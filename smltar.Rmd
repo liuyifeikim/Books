@@ -1,0 +1,158 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+璇█缂╁啓锛歨ttps://en.wikipedia.org/wiki/ISO_639-1
+鍋滅敤璇嶅簱锛歨ttps://github.com/quanteda/stopwords
+
+```{r}
+library(stopwords)
+```
+
+```{r}
+stopwords_getsources()
+```
+
+
+
+```{r}
+# 涓枃鍋滅敤璇?
+head(stopwords("zh", source = "misc"))
+head(stopwords("zh", source = "stopwords-iso"))
+length(stopwords("zh", source = "misc"))
+length(stopwords("zh", source = "stopwords-iso"))
+```
+
+```{r}
+library(tidyverse)
+library(tidytext)
+library(SnowballC)
+```
+
+```{r}
+complaints <- read_csv("complaints.csv")
+complaints
+```
+
+```{r}
+print(object.size(complaints), units = "GB")
+```
+
+```{r}
+complaints <- complaints %>%
+  filter(`Date received` > "2019-01-01") %>% 
+  drop_na(`Consumer complaint narrative`) %>% 
+  select(`Complaint ID`, `Consumer complaint narrative`)
+complaints
+```
+
+
+```{r}
+print(object.size(complaints), units = "GB")
+```
+
+
+```{r}
+# 转换为稀疏矩阵
+complaints %>%
+  unnest_tokens(output = word, input = `Consumer complaint narrative`) %>%
+  anti_join(get_stopwords(), by = "word") %>%
+  mutate(stem = wordStem(word)) %>%
+  count(`Complaint ID`, stem) %>%
+  cast_dfm(`Complaint ID`, stem, n)
+```
+
+
+```{r}
+# 用tf-idf转换为稀疏矩阵
+complaints %>%
+  unnest_tokens(output = word, input = `Consumer complaint narrative`) %>%
+  anti_join(get_stopwords(), by = "word") %>%
+  mutate(stem = wordStem(word)) %>%
+  count(`Complaint ID`, stem) %>%
+  bind_tf_idf(stem, `Complaint ID`, n) %>%
+  cast_dfm(`Complaint ID`, stem, tf_idf)
+```
+
+
+```{r}
+# 整洁化
+tidy_complaints <- complaints %>%
+  unnest_tokens(word, `Consumer complaint narrative`) %>%
+  add_count(word) %>%
+  filter(n >= 50) %>%
+  select(-n)
+
+nested_words <- tidy_complaints %>%
+  nest(words = c(word))
+
+nested_words
+```
+
+
+```{r}
+library(slider)
+library(tidyverse)
+library(widyr)
+library(furrr)
+library(tictoc)
+```
+
+
+```{r}
+slide_windows <- function(tbl, window_size) {
+  skipgrams <- slider::slide(
+    tbl, 
+    ~.x, 
+    .after = window_size - 1, 
+    .step = 1, 
+    .complete = TRUE
+  )
+  
+  safe_mutate <- safely(mutate)
+  
+  out <- map2(skipgrams,
+              1:length(skipgrams),
+              ~ safe_mutate(.x, window_id = .y))
+
+  out %>%
+    transpose() %>%
+    pluck("result") %>%
+    compact() %>%
+    bind_rows()
+}
+```
+
+
+```{r}
+# 计算点互信息
+plan(multisession)  ## for parallel processing
+tidy_pmi <- nested_words %>%
+  mutate(words = future_map(words, slide_windows, 4L)) %>%
+  unnest(words) %>%
+  unite(window_id, `Complaint ID`, window_id) %>%
+  pairwise_pmi(word, window_id)
+plan(sequential)
+```
+
+
+```{r}
+tidy_pmi
+```
+
+
+```{r}
+# 奇异值分解，得到词向量
+tidy_word_vectors <- tidy_pmi %>%
+  widely_svd(
+    item1, item2, pmi,
+    nv = 100, maxit = 1000
+  )
+```
+
+
+```{r}
+tidy_word_vectors
+```
+
