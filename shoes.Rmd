@@ -1,0 +1,101 @@
+---
+title: "Untitled"
+output: html_document
+---
+
+```{r}
+library(tidymodels)
+library(textrecipes)
+library(tidyverse)
+library(jiebaR)
+library(stopwords)
+tidymodels_prefer()
+```
+
+# textrecipes官网：https://textrecipes.tidymodels.org/index.html
+
+```{r}
+shoes <- read_csv("shoe_result.csv", locale = locale(encoding = "GBK"), col_names = TRUE)
+shoes <- shoes %>% 
+  select(price, comments) %>% 
+  drop_na() %>% 
+  filter(price > 0)
+shoes
+```
+
+
+```{r}
+# 数据划分
+set.seed(100)
+shoes_split <- initial_split(shoes)
+shoes_train <- training(shoes_split)
+shoes_test <- testing(shoes_split)
+dim(shoes_train)
+dim(shoes_test)
+```
+
+```{r}
+# 看分词结果
+recipe(price ~ comments, data = shoes_train) %>%
+  step_tokenize(comments) %>% 
+  show_tokens(comments) %>% 
+  .[1:3]
+```
+
+```{r}
+# 停用词词典
+stopwordsCN <- read.table("stopwordsCN.txt", encoding = "UTF-8")
+stopwordsCN
+stopwordsCN <- stopwordsCN %>% pull()
+stopwordsCN[1:10]
+
+stopwords_zh_misc <- stopwords("zh", source = "misc")
+stopwords_zh_misc[1:10]
+
+stopwords_zh_iso <- stopwords("zh", source = "stopwords-iso")
+stopwords_zh_iso[1:10]
+
+stopwords_all <- union_all(stopwords_zh_misc, stopwords_zh_iso)
+stopwords_all <- union_all(stopwords_all, stopwordsCN)
+
+length(stopwordsCN)
+length(stopwords_zh_misc)
+length(stopwords_zh_iso)
+length(stopwords_all)
+
+stopwords_all_df <- as.data.frame(stopwords_all)
+stopwords_all_df
+
+# write.table(stopwords_all_df, "stopwords_all.txt", row.names = FALSE, col.names = FALSE, quote = FALSE, fileEncoding = "UTF-8")
+```
+
+
+```{r}
+# 自定义中文分词引擎
+jieba_worker <- worker(stop_word = "stopwords_all.txt", bylines = TRUE, symbol = FALSE) # 要以列表形式输出
+jieba_tokenizer <- function(x){
+  segment(x, jiebar = jieba_worker)
+}
+```
+
+
+```{r}
+# 预处理流程
+shoes_rec <- recipe(price ~ comments, data = shoes_train) %>%
+  step_tokenize(comments, custom_token = jieba_tokenizer) %>% 
+  step_tokenfilter(comments, min_times = 3) %>%  # 建议先过滤减少词汇后再计算后续的指标
+  step_stopwords(comments, custom_stopword_source = stopwords_all) %>% 
+  step_tfidf(comments, smooth_idf = TRUE, norm = "l2") %>%  # 避免idf = 0
+  step_normalize(all_predictors())
+
+shoes_prep <- prep(shoes_rec)
+shoes_bake <- bake(shoes_prep, new_data = NULL)
+shoes_bake
+```
+
+# 回归模型方法：https://smltar.com/mlregression.html#firstmlregression
+
+```{r}
+
+```
+
