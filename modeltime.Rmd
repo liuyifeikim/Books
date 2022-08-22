@@ -1,0 +1,335 @@
+---
+title: "Untitled"
+output: html_document
+date: '2022-08-02'
+fig_width: 15
+fig_height: 8 
+---
+
+https://business-science.github.io/modeltime/articles/getting-started-with-modeltime.html
+
+```{r}
+#knitr::opts_chunk$set(fig.width=15, fig.height=8) 
+```
+
+
+```{r}
+library(xgboost)
+library(tidymodels)
+library(modeltime)
+library(tidyverse)
+library(lubridate)
+library(timetk)
+
+# This toggles plots from plotly (interactive) to ggplot (static)
+interactive <- FALSE
+```
+
+```{r}
+m4_monthly
+m750 <- m4_monthly %>% filter(id == "M750")
+m750
+```
+
+```{r}
+m750 %>%
+  plot_time_series(date, value, .interactive = interactive)
+```
+
+```{r}
+splits <- initial_time_split(m750, prop = 0.9)
+splits
+```
+
+```{r}
+model_fit_arima_no_boost <- arima_reg() %>%
+    set_engine(engine = "auto_arima") %>%
+    fit(value ~ date, data = training(splits))
+```
+
+```{r}
+model_fit_arima_boosted <- arima_boost(
+    min_n = 2,
+    learn_rate = 0.015
+) %>%
+    set_engine(engine = "auto_arima_xgboost") %>%
+    fit(value ~ date + as.numeric(date) + factor(month(date, label = TRUE), ordered = F),
+        data = training(splits))
+```
+
+```{r}
+model_fit_ets <- exp_smoothing() %>%
+    set_engine(engine = "ets") %>%
+    fit(value ~ date, data = training(splits))
+```
+
+```{r}
+model_fit_prophet <- prophet_reg() %>%
+    set_engine(engine = "prophet") %>%
+    fit(value ~ date, data = training(splits))
+```
+
+```{r}
+model_fit_lm <- linear_reg() %>%
+    set_engine("lm") %>%
+    fit(value ~ as.numeric(date) + factor(month(date, label = TRUE), ordered = FALSE),
+        data = training(splits))
+```
+
+```{r}
+model_spec_mars <- mars(mode = "regression") %>%
+    set_engine("earth") 
+
+recipe_spec <- recipe(value ~ date, data = training(splits)) %>%
+    step_date(date, features = "month", ordinal = FALSE) %>%
+    step_mutate(date_num = as.numeric(date)) %>%
+    step_normalize(date_num) %>%
+    step_rm(date)
+  
+wflw_fit_mars <- workflow() %>%
+    add_recipe(recipe_spec) %>%
+    add_model(model_spec_mars) %>%
+    fit(training(splits))
+```
+
+```{r}
+models_tbl <- modeltime_table(
+    model_fit_arima_no_boost,
+    model_fit_arima_boosted,
+    model_fit_ets,
+    model_fit_prophet,
+    model_fit_lm,
+    wflw_fit_mars
+)
+models_tbl
+```
+
+```{r}
+calibration_tbl <- models_tbl %>%
+    modeltime_calibrate(new_data = testing(splits))
+calibration_tbl
+```
+
+```{r}
+calibration_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = m750
+    ) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25, # For mobile screens
+      .interactive      = interactive
+    )
+```
+
+```{r}
+calibration_tbl %>%
+    modeltime_accuracy() %>%
+    table_modeltime_accuracy(
+        .interactive = interactive
+    )
+```
+
+```{r}
+refit_tbl <- calibration_tbl %>%
+    modeltime_refit(data = m750)
+
+refit_tbl %>%
+    modeltime_forecast(h = "3 years", actual_data = m750) %>%
+    plot_modeltime_forecast(
+      .legend_max_width = 25, # For mobile screens
+      .interactive      = interactive
+    )
+```
+
+```{r}
+library(tidymodels)
+library(modeltime)
+library(tidyverse)
+library(lubridate)
+library(timetk)
+```
+
+```{r}
+bike_sharing_daily
+```
+
+```{r}
+data <- bike_sharing_daily %>% select(dteday, cnt)
+data %>% plot_time_series(dteday, cnt)
+```
+
+```{r}
+splits <- time_series_split(data, assess = "3 months", cumulative = TRUE)
+splits
+```
+
+```{r}
+splits %>% 
+  tk_time_series_cv_plan() %>% 
+  plot_time_series_cv_plan(dteday, cnt)
+```
+
+```{r}
+# auto arima
+model_arima <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(cnt ~ dteday, training(splits))
+model_arima
+```
+
+```{r}
+# Prophet
+model_prophet <- prophet_reg(seasonality_yearly = TRUE) %>% 
+  set_engine("prophet") %>% 
+  fit(cnt ~ dteday, training(splits))
+model_prophet
+```
+
+```{r}
+model_glmnet <- linear_reg(penalty = 0.01) %>% 
+  set_engine("glmnet") %>% 
+  fit(cnt ~ wday(dteday, label = TRUE) + month(dteday, label = TRUE) + as.numeric(dteday), training(splits))
+model_glmnet
+```
+
+```{r}
+model_tbl <- modeltime_table(
+  model_arima,
+  model_prophet,
+  model_glmnet
+)
+model_tbl
+```
+
+```{r}
+calib_tbl <- model_tbl %>% modeltime_calibrate(testing(splits))
+calib_tbl
+```
+
+```{r}
+calib_tbl %>% modeltime_accuracy()
+```
+
+```{r}
+calib_tbl %>% 
+  modeltime_forecast(new_data = testing(splits), actual_data = data) %>% 
+  plot_modeltime_forecast()
+```
+
+```{r}
+future_forecast_tbl <- calib_tbl %>% 
+  modeltime_refit(data) %>% 
+  modeltime_forecast(h = "3 months", actual_data = data)
+future_forecast_tbl
+future_forecast_tbl %>% plot_modeltime_forecast()
+```
+
+```{r}
+library(tidymodels)
+library(modeltime)
+library(tidyverse)
+library(timetk)
+library(lubridate)
+```
+
+```{r}
+df <- bike_sharing_daily %>% select(date = dteday, cnt)
+df
+df %>% 
+  ggplot(aes(date, cnt)) +
+  geom_line()
+```
+
+```{r}
+df %>% 
+  mutate(year = year(date),
+         month = month(date)) %>% 
+  group_by(year, month) %>% 
+  mutate(monthly_count = sum(cnt),
+         month_date = min(date)) %>% 
+  ungroup() %>% 
+  select(month_date, monthly_count) %>% 
+  distinct() %>% 
+  arrange(month_date) %>% 
+  mutate(monthly_change = monthly_count - lag(monthly_count, n = 1)) %>% 
+  select(month_date, monthly_change) %>% 
+  drop_na() %>% 
+  ggplot(aes(month_date, monthly_change)) +
+  geom_line() +
+  geom_point()
+```
+
+```{r}
+df %>% 
+  mutate(daily_change = cnt - lag(cnt, n = 1)) %>% 
+  ggplot(aes(date, daily_change)) +
+  geom_line()
+```
+
+```{r}
+df <- df %>% 
+  mutate(daily_change = cnt - lag(cnt, n = 1)) %>% 
+  select(date, daily_change) %>% 
+  drop_na() %>% 
+  arrange(date)
+df
+```
+
+```{r}
+set.seed(100)
+training_data <- training(initial_time_split(df, prop = 0.8))
+testing_data <- testing(initial_time_split(df, prop = 0.8))
+training_data %>% 
+  mutate(type = "train") %>% 
+  bind_rows(testing_data %>% mutate(type = "test")) %>% 
+  ggplot(aes(date, daily_change, color = type)) +
+  geom_line()
+```
+
+```{r}
+arima_model <- arima_reg() %>% 
+  set_engine("auto_arima") %>% 
+  fit(daily_change ~ date, data = training_data)
+
+prophet_model <- prophet_reg() %>% 
+  set_engine("prophet") %>% 
+  fit(daily_change ~ date, data = training_data)
+
+tslm_model <- linear_reg() %>% 
+  set_engine("lm") %>% 
+  fit(daily_change ~ as.numeric(date) + factor(month(date, label = TRUE)), data = training_data)
+
+arima_boosted_model <- arima_boost(learn_rate = 0.15, min_n = 2) %>%
+  set_engine("auto_arima_xgboost") %>% 
+   fit(daily_change ~ date + as.numeric(date) + factor(month(date, label = TRUE)), data = training_data)
+
+forcast_table <- modeltime_table(
+  arima_model,
+  prophet_model,
+  tslm_model,
+  arima_boosted_model
+)
+
+forcast_table
+```
+
+```{r}
+forcast_table %>% 
+  modeltime_calibrate(testing_data) %>% 
+  modeltime_accuracy()
+
+forcast_table %>% 
+  modeltime_calibrate(testing_data) %>% 
+  modeltime_forecast() %>% 
+  plot_modeltime_forecast()
+```
+
+```{r}
+# 预测未来h个周期的数据
+forcast_table %>% 
+  modeltime_refit(df) %>% 
+  modeltime_forecast(h = 7, actual_data = df) %>% 
+  plot_modeltime_forecast()
+```
+

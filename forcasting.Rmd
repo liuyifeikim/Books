@@ -1,0 +1,545 @@
+---
+title: "Untitled"
+output: html_document
+date: '2022-08-20'
+fig_width: 18 
+fig_height: 7 
+---
+
+Forecasting: Principles and Practice
+
+https://otexts.com/fpp2  # 英文版
+https://otexts.com/fppcn # 中文版
+
+```{r}
+knitr::opts_chunk$set(fig.width=15, fig.height=8) 
+```
+
+
+```{r}
+# 载入包
+library(forecast)
+library(fpp)
+library(fpp2)
+library(ggplot2)
+```
+
+
+```{r}
+y <- ts(c(123,39,78,52,110), start=2012)
+y
+```
+
+```{r}
+y <- ts(z, start=2003, frequency=12)
+y
+```
+
+```{r}
+# melsyd
+# melsyd[,"Economy.Class"]
+autoplot(melsyd[,"Economy.Class"]) +
+  ggtitle("Economy class passengers: Melbourne-Sydney") +
+  xlab("Year") +
+  ylab("Thousands")
+```
+
+```{r}
+a10
+class(a10)
+```
+
+
+```{r}
+autoplot(a10) +
+  ggtitle("Antidiabetic drug sales") +
+  ylab("$ million") +
+  xlab("Year")
+```
+
+```{r}
+ggseasonplot(a10, year.labels=TRUE, year.labels.left=TRUE) +
+  ylab("$ million") +
+  ggtitle("Seasonal plot: antidiabetic drug sales")
+```
+
+```{r}
+ggseasonplot(a10, polar=TRUE) +
+  ylab("$ million") +
+  ggtitle("Polar seasonal plot: antidiabetic drug sales")
+```
+
+```{r}
+ggsubseriesplot(a10) +
+  ylab("$ million") +
+  ggtitle("Seasonal subseries plot: antidiabetic drug sales")
+```
+
+```{r}
+autoplot(elecdemand[,c("Demand","Temperature")], facets=TRUE) +
+  xlab("Year: 2014") + ylab("") +
+  ggtitle("Half-hourly electricity demand: Victoria, Australia")
+```
+
+```{r}
+qplot(Temperature, Demand, data=as.data.frame(elecdemand)) +
+  ylab("Demand (GW)") + xlab("Temperature (Celsius)")
+```
+
+```{r}
+autoplot(visnights[,1:5], facets=TRUE) +
+  ylab("Number of visitor nights each quarter (millions)")
+```
+
+
+```{r}
+autoplot(visnights[,1:5], facets=TRUE) +
+  ylab("Number of visitor nights each quarter (millions)")
+```
+
+```{r}
+GGally::ggpairs(as.data.frame(visnights[,1:5]))
+```
+
+```{r}
+ausbeer
+beer2 <- window(ausbeer, start=1992)
+beer2
+gglagplot(beer2)
+```
+
+```{r}
+elec
+aelec <- window(elec, start=1980)
+aelec
+autoplot(aelec) + xlab("Year") + ylab("GWh")
+```
+
+```{r}
+ggAcf(aelec, lag=48)
+```
+
+```{r}
+set.seed(30)
+y <- ts(rnorm(50))
+autoplot(y) + ggtitle("White noise")
+```
+
+```{r}
+ggAcf(y)
+```
+
+```{r}
+beer2 <- window(ausbeer,start=1992,end=c(2007,4))
+beer2
+meanf(beer2, h=11)  # 使用均值
+naive(beer2, h=11)  # 使用最后一个值
+snaive(beer2, h=11) # 使用最后一个周期
+autoplot(beer2) +
+  autolayer(meanf(beer2, h=11),
+    series="Mean", PI=FALSE) +
+  autolayer(naive(beer2, h=11),
+    series="Naïve", PI=FALSE) +
+  autolayer(snaive(beer2, h=11),
+    series="Seasonal naïve", PI=FALSE) +
+  ggtitle("Forecasts for quarterly beer production") +
+  xlab("Year") + ylab("Megalitres") +
+  guides(colour=guide_legend(title="Forecast"))
+```
+
+```{r}
+goog200
+meanf(goog200, h=40)            # 使用均值
+rwf(goog200, h=40)              # 使用最后一个值
+rwf(goog200, drift=TRUE, h=40)  # 累加一个相等的drift值，即现有序列的平均变化量: (yt - y1) / (t - 1) = 0.6967251
+autoplot(goog200) +
+  autolayer(meanf(goog200, h=40),
+    series="Mean", PI=FALSE) +
+  autolayer(rwf(goog200, h=40),
+    series="Naïve", PI=FALSE) +
+  autolayer(rwf(goog200, drift=TRUE, h=40),
+    series="Drift", PI=FALSE) +
+  ggtitle("Google stock (daily ending 6 Dec 2013)") +
+  xlab("Day") + ylab("Closing Price (US$)") +
+  guides(colour=guide_legend(title="Forecast"))
+```
+
+```{r}
+milk
+dframe <- cbind(Monthly = milk, DailyAverage = milk / monthdays(milk))
+dframe
+autoplot(dframe, facet=TRUE) +
+  xlab("Years") + ylab("Pounds") +
+  ggtitle("Milk production per cow")
+```
+
+```{r}
+elec
+(lambda <- BoxCox.lambda(elec))
+autoplot(BoxCox(elec,lambda))
+```
+
+```{r}
+fc <- rwf(eggs, drift=TRUE, lambda=0, h=50, level=80)                   # 预测中位值
+fc2 <- rwf(eggs, drift=TRUE, lambda=0, h=50, level=80, biasadj=TRUE)    # 预测均值
+fc
+fc2
+autoplot(eggs) +
+  autolayer(fc, series="Simple back transformation") +
+  autolayer(fc2, series="Bias adjusted", PI=FALSE) +
+  guides(colour=guide_legend(title="Forecast"))
+```
+
+```{r}
+autoplot(goog200) + xlab("天") + ylab("收盘价（美元）") +
+  ggtitle("谷歌公司每日股价（截止至2013年12月6日）")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+res <- residuals(naive(goog200))
+res
+autoplot(res) + xlab("天") + ylab("") +
+  ggtitle("Naïve方法的残差")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+gghistogram(res) + ggtitle("残差直方图")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+ggAcf(res) + ggtitle("残差ACF图")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+Box.test(res, lag=10, fitdf=0)
+Box.test(res, lag=10, fitdf=0, type="Lj") # 不显著说明和白噪音序列没有明显区别
+```
+
+```{r}
+# 残差分析打包
+checkresiduals(naive(goog200))
+```
+
+```{r}
+beer2 <- window(ausbeer,start=1992,end=c(2007,4))
+beerfit1 <- meanf(beer2,h=10)
+beerfit2 <- rwf(beer2,h=10)
+beerfit3 <- snaive(beer2,h=10)
+autoplot(window(ausbeer, start=1992)) +
+  autolayer(beerfit1$mean, series="均值") +
+  autolayer(beerfit2$mean, series="Naïve") +
+  autolayer(beerfit3$mean, series="季节性naïve") +
+  xlab("年份") + ylab("百万升") +
+  ggtitle("啤酒季度产量预测") +
+  guides(colour=guide_legend(title="预测")) +
+  theme(text = element_text(family = "STHeiti")) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+beer3 <- window(ausbeer, start=2008)
+accuracy(beerfit1, beer3)
+accuracy(beerfit2, beer3)
+accuracy(beerfit3, beer3)
+```
+
+```{r}
+googfc1 <- meanf(goog200, h=40)
+googfc2 <- rwf(goog200, h=40)
+googfc3 <- rwf(goog200, drift=TRUE, h=40)
+autoplot(subset(goog, end = 240)) +
+  autolayer(googfc1, PI=FALSE, series="均值") +
+  autolayer(googfc2, PI=FALSE, series="Naïve") +
+  autolayer(googfc3, PI=FALSE, series="漂移") +
+  xlab("天") + ylab("收盘价（美元）") +
+  ggtitle("谷歌公司每日股价（截止至2013年12月6日）") +
+  guides(colour=guide_legend(title="预测"))+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+googtest <- window(goog, start=201, end=240)
+accuracy(googfc1, googtest)
+accuracy(googfc2, googtest)
+accuracy(googfc3, googtest)
+```
+
+```{r}
+e <- tsCV(goog200, rwf, drift=TRUE, h=1)
+e
+sqrt(mean(e^2, na.rm=TRUE))
+sqrt(mean(residuals(rwf(goog200, drift=TRUE))^2, na.rm=TRUE))
+```
+
+```{r}
+e <- tsCV(goog200, forecastfunction=naive, h=8)
+mse <- colMeans(e^2, na.rm = T)
+data.frame(h = 1:8, MSE = mse) %>%
+  ggplot(aes(x = h, y = MSE)) + geom_point()
+```
+
+```{r}
+# 自动预测
+ausbeer
+forecast(ausbeer)
+```
+
+```{r}
+# uschange
+class(uschange)
+```
+
+
+```{r}
+cbind('消费' = uschange[, "Consumption"],
+      '收入' = uschange[, "Income"]) %>%
+  autoplot(facets = TRUE, colour=TRUE) +
+  ylab("增长率 % ") + xlab("年份") +
+    theme(text = element_text(family = "STHeiti"))
+```
+
+```{r}
+uschange %>%
+  as.data.frame() %>%
+  ggplot(aes(x=Income, y=Consumption)) +
+    ylab("季度消费支出变化 %") +
+    xlab("季度收入变化 %") +
+    geom_point() +
+    geom_smooth(method="lm", se=FALSE)+
+    theme(text = element_text(family = "STHeiti"))+
+    theme(plot.title = element_text(hjust = 0.5))
+#> `geom_smooth()` using formula 'y ~ x'
+```
+
+```{r}
+tslm(Consumption ~ Income, data=uschange)
+```
+
+```{r}
+uschange %>%
+  as.data.frame() %>%
+  GGally::ggpairs()
+```
+
+```{r}
+fit.consMR <- tslm(Consumption ~ Income + Production + Unemployment + Savings, data=uschange)
+summary(fit.consMR)
+```
+
+```{r}
+autoplot(uschange[,'Consumption'], series="真实值") +
+  autolayer(fitted(fit.consMR), series="拟合值") +
+  xlab("年份") + ylab("") +
+  ggtitle("美国消费支出的百分比变化") +
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# 真实值与拟合值关系图
+cbind(Data=uschange[,"Consumption"], Fitted=fitted(fit.consMR)) %>%
+  as.data.frame() %>%
+  ggplot(aes(x=Data, y=Fitted)) +
+    geom_point() +
+    xlab("拟合值（预测值）") +
+    ylab("真实值") +
+    ggtitle("美国消费支出的百分比变化") +
+    geom_abline(intercept=0, slope=1)+
+    theme(text = element_text(family = "STHeiti"))+
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+checkresiduals(fit.consMR)
+```
+
+```{r}
+# 预测变量与残差关系图：两者无显著关系视为理想
+df <- as.data.frame(uschange)
+df[,"Residuals"]  <- as.numeric(residuals(fit.consMR))
+p1 <- ggplot(df, aes(x=Income, y=Residuals)) + geom_point() +
+  xlab("收入") + ylab("残差")+
+    theme(text = element_text(family = "STHeiti"))
+p2 <- ggplot(df, aes(x=Production, y=Residuals)) + geom_point()+
+  xlab("工业产出") + ylab("残差")+
+    theme(text = element_text(family = "STHeiti"))
+p3 <- ggplot(df, aes(x=Savings, y=Residuals)) + geom_point()+
+  xlab("个人储蓄") + ylab("残差")+
+    theme(text = element_text(family = "STHeiti"))
+p4 <- ggplot(df, aes(x=Unemployment, y=Residuals)) + geom_point()+
+  xlab("失业率") + ylab("残差")+
+    theme(text = element_text(family = "STHeiti"))
+gridExtra::grid.arrange(p1, p2, p3, p4, nrow=2)
+```
+
+```{r}
+# 拟合值与残差关系图
+cbind(Fitted = fitted(fit.consMR), Residuals=residuals(fit.consMR)) %>%
+  as.data.frame() %>%
+  ggplot(aes(x=Fitted, y=Residuals)) + geom_point() + 
+  xlab('拟合值') + ylab('残差') +
+    theme(text = element_text(family = "STHeiti"))+
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+beer2 <- window(ausbeer, start=1992)
+autoplot(beer2) + xlab("年份") + ylab("万升")+
+  theme(text = element_text(family = "STHeiti"))
+```
+
+```{r}
+fit.beer <- tslm(beer2 ~ trend + season) # trend和season由tslm自动创建
+summary(fit.beer)
+```
+
+```{r}
+autoplot(beer2, series="真实值") +
+  autolayer(fitted(fit.beer), series="拟合值") +
+  xlab("年份") + ylab("万升") +
+  ggtitle("啤酒的季度产出")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+cbind(Data=beer2, Fitted=fitted(fit.beer)) %>%
+  as.data.frame() %>%
+  ggplot(aes(x=Data, y=Fitted, colour=as.factor(cycle(beer2)))) +
+    geom_point() +
+    ylab("拟合值") + xlab("真实值") +
+    ggtitle("啤酒的季度产出") +
+    scale_colour_brewer(palette="Dark2", name="季度") +
+    geom_abline(intercept=0, slope=1)+
+    theme(text = element_text(family = "STHeiti"))+
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+CV(fit.consMR)
+```
+
+```{r}
+beer2 <- window(ausbeer, start=1992)
+fit.beer <- tslm(beer2 ~ trend + season)
+fcast <- forecast(fit.beer)
+fcast
+autoplot(fcast) +
+  ggtitle("利用线性回归模型预测啤酒产出")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+fit.consBest <- tslm(
+  Consumption ~ Income + Savings + Unemployment,
+  data = uschange)
+h <- 4
+newdata <- cbind(
+    Income = c(1, 1, 1, 1),
+    Savings = c(0.5, 0.5, 0.5, 0.5),
+    Unemployment = c(0, 0, 0, 0)
+  ) %>%
+  as.data.frame()
+fcast.up <- forecast(fit.consBest, newdata = newdata)
+newdata <- cbind(
+    Income = rep(-1, h),
+    Savings = rep(-0.5, h),
+    Unemployment = rep(0, h)
+  ) %>%
+  as.data.frame()
+fcast.down <- forecast(fit.consBest, newdata = newdata)
+
+autoplot(uschange[, 1]) + 
+  xlab('年份') + ylab("美国消费的变化 %") +
+  autolayer(fcast.up, PI = TRUE, series = "增加") +
+  autolayer(fcast.down, PI = TRUE, series = "减少") +
+  guides(colour = guide_legend(title = "不同场景"))+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+fit.cons <- tslm(Consumption ~ Income, data = uschange)
+h <- 4
+fcast.ave <- forecast(fit.cons,
+  newdata = data.frame(Income = rep(mean(uschange[, "Income"]), h)))
+fcast.up <- forecast(fit.cons,
+  newdata = data.frame(Income = rep(5, h)))
+autoplot(uschange[, "Consumption"]) +
+  xlab('年份')+
+  ylab("美国消费变化率 %") +
+  autolayer(fcast.ave, PI = TRUE, series = "平均增长") +
+  autolayer(fcast.up, PI = TRUE, series = "极值增长") +
+  guides(colour = guide_legend(title = "不同情况"))+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+h <- 10
+fit.lin <- tslm(marathon ~ trend)
+fcasts.lin <- forecast(fit.lin, h = h)
+fit.exp <- tslm(marathon ~ trend, lambda = 0)
+fcasts.exp <- forecast(fit.exp, h = h)
+
+t <- time(marathon)
+t.break1 <- 1940
+t.break2 <- 1980
+tb1 <- ts(pmax(0, t - t.break1), start = 1897)
+tb2 <- ts(pmax(0, t - t.break2), start = 1897)
+
+fit.pw <- tslm(marathon ~ t + tb1 + tb2)
+t.new <- t[length(t)] + seq(h)
+tb1.new <- tb1[length(tb1)] + seq(h)
+tb2.new <- tb2[length(tb2)] + seq(h)
+
+newdata <- cbind(t = t.new, tb1 = tb1.new, tb2 = tb2.new) %>%
+  as.data.frame()
+fcasts.pw <- forecast(fit.pw, newdata = newdata)
+
+fit.spline <- tslm(marathon ~ t + I(t^2) + I(t^3) +
+  I(tb1^3) + I(tb2^3))
+fcasts.spline <- forecast(fit.spline, newdata = newdata)
+
+autoplot(marathon) +
+  autolayer(fitted(fit.lin), series = "线性") +
+  autolayer(fitted(fit.exp), series = "指数型") +
+  autolayer(fitted(fit.pw), series = "分段回归法") +
+  autolayer(fitted(fit.spline), series = "三次样条法") +
+  autolayer(fcasts.pw, series = "分段回归法") +
+  autolayer(fcasts.lin$mean, series = "线性") +
+  autolayer(fcasts.exp$mean, series = "指数型") +
+  autolayer(fcasts.spline$mean, series = "三次样条法") +
+  xlab("年份") + ylab("获胜者所用时间（分钟）") +
+  ggtitle("波士顿马拉松") +
+  guides(colour = guide_legend(title = " "))+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+marathon %>%
+  splinef(lambda=0) %>%
+  autoplot()+
+  xlab('年份')+
+  ggtitle("")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+marathon %>%
+  splinef(lambda=0) %>%
+  checkresiduals()
+```
+
