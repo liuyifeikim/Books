@@ -23,6 +23,7 @@ library(fpp)
 library(fpp2)
 library(ggplot2)
 library(seasonal)
+library(urca)
 ```
 
 
@@ -778,5 +779,44 @@ fit %>% forecast(h=8) %>%
 
 ```{r}
 Box.test(diff(goog200),lag=10,type="Ljung-Box")
+```
+
+```{r}
+cbind("销售量 ($百万)" = a10,
+      "每月销量对数" = log(a10),
+      "每年销量变化对数" = diff(log(a10),12)) %>%
+  autoplot(facets=TRUE) +
+    xlab("年份") + ylab("") +
+    ggtitle("抗糖尿病药剂销量")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+cbind("十亿千瓦时" = usmelec,
+      "对数" = log(usmelec),
+      "季节性\n 差分对数" = diff(log(usmelec),12),
+      "二次\n 差分对数" = diff(diff(log(usmelec),12),1)) %>%
+  autoplot(facets=TRUE) +
+    xlab("年份") + ylab("") +
+    ggtitle("美国电网每月发电量")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# 虚无假设为序列平稳
+goog %>% ur.kpss() %>% summary() # 否定虚无假设，即该序列不平稳。我们可以对数据进行差分
+```
+
+```{r}
+goog %>% diff() %>% ur.kpss() %>% summary() # 不能否定原假设，即序列是平稳的
+```
+
+```{r}
+# 判断是否需要进行一次差分
+ndiffs(goog) 
+usmelec %>% log() %>% nsdiffs()
+usmelec %>% log() %>% diff(lag=12) %>% ndiffs()
 ```
 
