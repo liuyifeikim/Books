@@ -820,3 +820,119 @@ usmelec %>% log() %>% nsdiffs()
 usmelec %>% log() %>% diff(lag=12) %>% ndiffs()
 ```
 
+```{r}
+autoplot(uschange[,"Consumption"]) +
+  xlab("年份") + ylab("季度占比变化")+
+  theme(text = element_text(family = "STHeiti"))+
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# 自动arima模型
+fit <- auto.arima(uschange[,"Consumption"], seasonal = FALSE)
+fit
+```
+
+```{r}
+fit %>% forecast(h=10) %>% autoplot(include=80)
+```
+
+```{r}
+ggAcf(uschange[,"Consumption"],main="")
+ggPacf(uschange[,"Consumption"],main="")
+```
+
+```{r}
+fit2 <- Arima(uschange[,"Consumption"], order=c(3,0,0))
+fit2
+```
+
+```{r}
+# 历遍更多模型
+fit3 <- auto.arima(uschange[,"Consumption"], seasonal=FALSE, stepwise=FALSE, approximation=FALSE)
+fit3
+```
+
+
+Arima建模过程：https://otexts.com/fppcn/arima-r.html
+
+```{r}
+elecequip %>% stl(s.window='periodic') %>% seasadj() -> eeadj
+autoplot(eeadj)
+```
+
+```{r}
+# 一阶差分，看是否平稳
+eeadj %>% diff() %>% ggtsdisplay(main="")
+```
+
+```{r}
+# 拟合模型
+fit <- Arima(eeadj, order=c(3, 1, 1))
+summary(fit)
+```
+
+```{r}
+# 残差检验：通过白噪音检验
+checkresiduals(fit)
+```
+
+```{r}
+# 预测值
+autoplot(forecast(fit))
+```
+
+```{r}
+autoplot(euretail) + ylab("零售指数") + xlab("年份")
+```
+
+```{r}
+# 季节性差分
+euretail %>% diff(lag=4) %>% ggtsdisplay()
+```
+
+```{r}
+# 季节性+1阶差分
+euretail %>% diff(lag=4) %>% diff() %>% ggtsdisplay()
+```
+
+```{r}
+euretail %>%
+  Arima(order=c(0,1,1),seasonal=c(0,1,1)) %>%
+  residuals() %>%
+  ggtsdisplay()
+
+fit3 <- Arima(euretail,order=c(0,1,3),seasonal=c(0,1,1))
+checkresiduals(fit3)
+fit3 %>% forecast(h=12) %>% autoplot()
+```
+
+```{r}
+auto.arima(euretail)
+```
+
+```{r}
+lh02 <- log(h02)
+cbind("H02 sales (million scripts)" = h02,
+      "Log H02 sales"=lh02) %>%
+  autoplot(facets=TRUE) + xlab("年份") + ylab("")
+```
+
+```{r}
+lh02 %>% diff(lag=12) %>%
+  ggtsdisplay(xlab="年份",main="季节性差分后的H02药物销量")
+```
+
+```{r}
+(fit <- Arima(h02,order=c(3,0,1),seasonal=c(0,1,2),lambda=0))
+checkresiduals(fit,lag=36)
+```
+
+```{r}
+h02 %>%
+  Arima(order=c(3,0,1),seasonal=c(0,1,2),lambda=0) %>%
+  forecast() %>%
+  autoplot() +
+    ylab("H02销量(百万剂)") + xlab("年份")
+```
+
