@@ -1,0 +1,47 @@
+---
+title: "Untitled"
+output: html_document
+date: '2022-09-13'
+---
+
+
+```{r global options}
+knitr::opts_chunk$set(fig.width = 15, fig.height = 8)
+```
+
+
+```{r}
+library(fpp3)
+library(tidyverse)
+```
+
+
+```{r}
+new <- read_csv("uv.csv")
+new
+```
+
+```{r}
+new_tsbble <- new %>% mutate(date = as_date(date)) %>% as_tsibble(index = date)
+new_tsbble
+class(new_tsbble)
+```
+
+```{r}
+new_tsbble %>% 
+  autoplot(new) + 
+  labs(title = "New Users",
+       subtitle = "XHC New Users",
+       y = "Number of New Users per Day")
+```
+
+```{r}
+new_tsbble %>% gg_season(new)
+new_tsbble %>% gg_season(new, period = "week")
+new_tsbble %>% gg_season(new, period = "month")
+```
+
+```{r}
+# new_tsbble %>% gg_subseries(new)
+```
+
