@@ -6,13 +6,16 @@ date: '2022-09-13'
 
 
 ```{r global options}
-knitr::opts_chunk$set(fig.width = 15, fig.height = 8)
+knitr::opts_chunk$set(fig.width = 20, fig.height = 8)
 ```
 
 
-```{r}
+```{r loading packages}
 library(fpp3)
 library(tidyverse)
+library(latex2exp)
+library(slider)
+library(seasonal)
 ```
 
 
@@ -43,5 +46,392 @@ new_tsbble %>% gg_season(new, period = "month")
 
 ```{r}
 # new_tsbble %>% gg_subseries(new)
+```
+
+
+```{r}
+new_tsbble %>%
+  gg_lag(new, geom = "point") +
+  labs(x = "lag(New, k)")
+```
+
+```{r}
+# 自相关系数
+new_tsbble %>% ACF(new, lag_max = 10)
+new_tsbble %>% ACF(new, lag_max = 10) %>% autoplot()
+new_tsbble %>% ACF(new, lag_max = 50) %>% autoplot()
+```
+
+
+```{r}
+new_tsbble %>%
+  index_by(month = month(date)) %>%
+  summarise(sum_new = sum(new))
+new_tsbble %>%
+  group_by(month = month(date)) %>%
+  summarise(sum_new = sum(new))
+```
+
+```{r}
+# box-cox变换
+lambda <- new_tsbble %>%
+  features(new, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+new_tsbble %>%
+  autoplot(box_cox(new, lambda)) +
+  labs(y = "",
+       title = latex2exp::TeX(paste0(
+         "Transformed New with $\\lambda$ = ",
+         round(lambda, 2))))
+```
+
+```{r}
+# STL时间序列分解
+dcmp <- new_tsbble %>% model(stl = STL(new))
+components(dcmp)
+components(dcmp) %>% as_tsibble() %>% autoplot(new, colour="gray") + geom_line(aes(y=trend), colour = "#D55E00") 
+components(dcmp) %>% as_tsibble() %>% autoplot(new, colour="gray") + geom_line(aes(y=season_adjust), colour = "#0072B2") 
+components(dcmp) %>% autoplot()
+```
+
+
+```{r}
+# 移动平均
+new_ma_5 <- new_tsbble %>%
+  mutate(ma_5 = slide_dbl(new, mean, .before = 2, .after = 2, .complete = TRUE))
+new_ma_5
+new_ma_5 %>%
+  autoplot(new) +
+  geom_line(aes(y = ma_5), colour = "#D55E00") +
+  labs(y = "% of GDP", title = "Total New users") +
+  guides(colour = guide_legend(title = "series"))
+```
+
+
+```{r}
+# 时间序列分解：经典方法，不推荐使用
+new_tsbble %>%
+  model(classical_decomposition(new, type = "additive")) %>%
+  components() %>%
+  autoplot() +
+  labs(title = "Classical additive decomposition")
+
+new_tsbble %>%
+  model(classical_decomposition(new, type = "multiplicative")) %>%
+  components() %>%
+  autoplot() +
+  labs(title = "Classical additive decomposition")
+```
+
+
+```{r}
+# 时间序列分解：X11
+x11_dcmp <- new_tsbble %>%
+  model(x11 = X_13ARIMA_SEATS(new ~ x11())) %>%
+  components()
+x11_dcmp
+x11_dcmp %>% 
+  autoplot() + 
+  labs(title = "Decomposition using X-11.")
+```
+
+```{r}
+# 时间序列分解：SEATS
+seats_dcmp <- new_tsbble %>%
+  model(seats = X_13ARIMA_SEATS(new ~ seats())) %>%
+  components()
+seats_dcmp
+seats_dcmp %>% 
+  autoplot() + 
+  labs(title = "Decomposition using SEATS")
+```
+
+```{r}
+new_tsbble %>%
+  model(STL(new ~ trend(window = 7) +season(window = "periodic"),robust = TRUE)) %>%
+  components() %>%
+  autoplot()
+```
+
+```{r}
+# 计算时间序列特征
+new_tsbble %>% features(new, list(mean = mean, quantile = quantile))
+new_tsbble %>% features(new, feat_acf)
+new_tsbble %>% features(new, feat_stl)
+new_tsbble %>% features(new, feature_set())
+```
+
+```{r}
+# 模型拟合
+fit <- new_tsbble %>% model(trend_model = TSLM(new ~ trend()))
+fit %>% forecast(h = "10 days")
+fit %>%
+  forecast(h = "10 days") %>%
+  autoplot(new_tsbble)
+```
+
+```{r}
+# 简单预测方法
+new_tsbble %>% filter_index("2022-01-01" ~ "2022-07-31")
+new_tsbble %>% model(MEAN(new)) %>% augment()
+new_tsbble %>% model(NAIVE(new)) %>% augment() # 末期取值
+new_tsbble %>% model(SNAIVE(new ~ lag("month"))) %>% augment() # 上一季节对应取值
+new_tsbble %>% model(RW(new ~ drift())) %>% augment() # 平均漂移值
+```
+
+```{r}
+train <- new_tsbble %>%
+  filter_index("2022-01-01" ~ "2022-07-31")
+train_fit <- train %>%
+  model(
+    Mean = MEAN(new),
+    Naive = NAIVE(new),
+    Seasonal_naive = SNAIVE(new),
+    Drift = NAIVE(new ~ drift())
+  )
+train_fc <- train_fit %>% forecast(h = 15)
+train_fc %>%
+  autoplot(train, level = NULL) +
+  autolayer(filter_index(new_tsbble, "2022-08-01" ~ .), colour = "black") +
+  labs(y = "New", title = "Forecasts for New Users") +
+  guides(colour = guide_legend(title = "Forecast"))
+```
+
+```{r}
+# 残差分析
+train_fit %>% augment()
+new_tsbble %>% model(NAIVE(new)) %>% augment() %>% autoplot(.innov)
+new_tsbble %>% model(NAIVE(new)) %>% augment() %>% 
+  ggplot(aes(x = .innov)) + geom_histogram(bins = 30) + labs(title = "Histogram of residuals")
+```
+
+```{r}
+new_tsbble %>% 
+  model(NAIVE(new)) %>% 
+  augment() %>%
+  ACF(.innov) %>%
+  autoplot() +
+  labs(title = "Residuals from the naïve method")
+```
+
+```{r}
+# 残差分析图汇总
+new_tsbble %>% 
+  model(NAIVE(new)) %>% 
+  gg_tsresiduals()
+```
+
+```{r}
+# portmanteau test：不显著说明残差序列可认为是白噪音，反之则不是
+
+# Box-Pierce test
+new_tsbble %>% 
+  model(NAIVE(new)) %>% 
+  augment() %>% 
+  features(.innov, box_pierce, lag = 10, dof = 0) 
+
+# Ljung-Box test
+new_tsbble %>% 
+  model(NAIVE(new)) %>% 
+  augment() %>% 
+  features(.innov, ljung_box, lag = 10, dof = 0) 
+
+new_tsbble %>% 
+  model(RW(new ~ drift())) %>% 
+  augment() %>% 
+  features(.innov, ljung_box, lag = 10, dof = 1) 
+```
+
+```{r}
+# 区间估计
+new_tsbble %>%
+  model(NAIVE(new)) %>%
+  forecast(h = 10) %>%
+  hilo() %>% 
+  unpack_hilo(c("80%", "95%"))
+```
+
+```{r}
+new_tsbble %>%
+  model(NAIVE(new)) %>%
+  forecast(h = 10) %>%
+  autoplot(new_tsbble)
+```
+
+```{r}
+# 自助抽样
+sim <- new_tsbble %>%
+  model(NAIVE(new)) %>%
+  generate(h = 10, times = 5, bootstrap = TRUE)
+
+new_tsbble %>%
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = new)) +
+  geom_line(aes(y = .sim, colour = as.factor(.rep)), data = sim) +
+  guides(colour = "none")
+
+new_tsbble %>%
+  model(NAIVE(new)) %>%
+  forecast(h = 10, bootstrap = TRUE) %>% 
+  autoplot(new_tsbble)
+```
+
+```{r}
+# 时间序列分解预测
+dcmp <- new_tsbble %>%
+  model(STL(new ~ trend(window = 7), robust = TRUE)) %>%
+  components() %>%
+  select(-.model)
+
+dcmp %>% 
+  model(NAIVE(season_adjust)) %>%
+  forecast() %>%
+  autoplot(dcmp)
+```
+
+```{r}
+fit_dcmp <- new_tsbble %>%
+  model(stlf = decomposition_model(
+    STL(new ~ trend(window = 7), robust = TRUE),
+    NAIVE(season_adjust)
+  ))
+
+fit_dcmp %>%
+  forecast() %>%
+  autoplot(new_tsbble)
+
+fit_dcmp %>% gg_tsresiduals()
+```
+
+```{r}
+# 预测结果的性能评价
+
+# 同时建立多个模型
+train_fit <- train %>%
+  model(
+    Mean = MEAN(new),
+    Naive = NAIVE(new),
+    Seasonal_naive = SNAIVE(new),
+    Drift = RW(new ~ drift())
+  )
+train_fit
+
+# 结果预测
+train_fc <- train_fit %>%
+  forecast(h = 10)
+train_fc
+
+# 预测结果可视化
+train_fc %>%
+  autoplot(new_tsbble, level = NULL) +
+  labs(y = "New_users", title = "Forecasts for New Users") +
+  guides(colour = guide_legend(title = "Forecast"))
+
+# 性能评估
+accuracy(train_fc, new_tsbble)
+```
+
+```{r}
+# 交叉验证
+new_tsbble_tr <- new_tsbble %>%
+  stretch_tsibble(.init = 3, .step = 1)
+new_tsbble_tr
+
+# 交叉验证结果
+new_tsbble_tr %>%
+  model(RW(new ~ drift())) %>%
+  forecast(h = 1) %>%
+  accuracy(new_tsbble)
+
+# 训练集结果
+new_tsbble %>%
+  model(RW(new ~ drift())) %>%
+  accuracy()
+```
+
+```{r}
+new_tsbble_wide <- new_tsbble %>% 
+  mutate(month = month(date),
+         day = day(date),
+         wday = wday(date),
+         yday = yday(date)
+         )
+new_tsbble_wide
+```
+
+```{r}
+# 回归模型
+new_tsbble_wide %>%
+  select(-date) %>% 
+  model(TSLM(new ~ month + day + wday + yday)) %>%
+  report()
+```
+
+```{r}
+# 拟合结果评估
+lm_fit <- new_tsbble_wide %>%
+  select(-date) %>% 
+  model(TSLM(new ~ month + day + wday + yday))
+
+lm_fit %>% 
+  augment() %>%
+  ggplot(aes(x = date)) +
+  geom_line(aes(y = new, colour = "Data")) +
+  geom_line(aes(y = .fitted, colour = "Fitted")) +
+  labs(y = NULL, title = "New Users Prediction") +
+  scale_colour_manual(values = c(Data="black", Fitted="#D55E00")) +
+  guides(colour = guide_legend(title = NULL))
+
+lm_fit %>% 
+  augment() %>%
+  ggplot(aes(x = new, y = .fitted)) +
+  geom_point() +
+  labs(y = "Fitted (predicted values)", x = "Data (actual values)", title = "New Users Prediction") +
+  geom_abline(intercept = 0, slope = 1)
+
+# 残差检验
+lm_fit %>% gg_tsresiduals()
+lm_fit %>% 
+  augment() %>%
+  features(.innov, ljung_box, lag = 10, dof = 5)
+```
+
+```{r}
+# 自动生成的变量
+new_tsbble_wide %>%
+  select(-date) %>% 
+  model(TSLM(new ~ trend() + season())) %>% 
+  report()
+```
+
+```{r}
+new_tsbble_wide %>%
+  select(-date) %>% 
+  model(TSLM(new ~ trend() + fourier(K = 2))) %>% 
+  report()
+```
+
+```{r}
+train_fit <- train %>%
+  model(TSLM(new ~ trend() + season()))
+train_fc <- forecast(train_fit)
+train_fc %>%
+  autoplot(train)
+```
+
+```{r}
+fit_trends <- new_tsbble_wide %>%
+  model(
+    linear = TSLM(new ~ trend()),
+    exponential = TSLM(log(new) ~ trend()),
+    piecewise = TSLM(new ~ trend(knots = c("2022-04-01", "2022-06-01")))
+  )
+fc_trends <- fit_trends %>% forecast(h = 10)
+new_tsbble_wide %>%
+  autoplot(new) +
+  geom_line(data = fitted(fit_trends),
+            aes(y = .fitted, colour = .model)) +
+  autolayer(fc_trends, alpha = 0.5, level = 95)
 ```
 
