@@ -435,3 +435,89 @@ new_tsbble_wide %>%
   autolayer(fc_trends, alpha = 0.5, level = 95)
 ```
 
+```{r}
+# simple exponential smoothing
+fit <- new_tsbble_wide %>%
+  model(ETS(new ~ error("A") + trend("N") + season("N")))
+fc <- fit %>%
+  forecast(h = 5)
+fc
+```
+
+```{r}
+fc %>%
+  autoplot(new_tsbble_wide) +
+  geom_line(aes(y = .fitted), col="#D55E00", data = augment(fit)) +
+  guides(colour = "none")
+```
+
+```{r}
+fit <- new_tsbble_wide %>%
+  model(AAN = ETS(new ~ error("A") + trend("A") + season("N")))
+fc <- fit %>% forecast(h = 10)
+fc
+```
+
+```{r}
+new_tsbble %>%
+  model(
+    SES = ETS(new ~ error("A") + trend("N") + season("N")),
+    `Holt's method` = ETS(new ~ error("A") + trend("A") + season("N")),
+    `Damped Holt's method` = ETS(new ~ error("A") + trend("Ad", phi = 0.9) + season("N"))
+  ) %>%
+  forecast(h = 15) %>%
+  autoplot(new_tsbble, level = NULL) +
+  guides(colour = guide_legend(title = "Forecast")) +
+  scale_y_log10()
+```
+
+```{r}
+fit <- new_tsbble %>%
+  model(
+    additive = ETS(new ~ error("A") + trend("A") + season("A")),
+    multiplicative = ETS(new ~ error("M") + trend("A") + season("M"))
+  )
+fc <- fit %>% forecast(h = 10)
+fc %>%
+  autoplot(new_tsbble, level = NULL) +
+  guides(colour = guide_legend(title = "Forecast")) +
+  scale_y_log10()
+```
+
+```{r}
+new_tsbble %>%
+  model(
+    hw = ETS(new ~ error("M") + trend("Ad") + season("M"))
+  ) %>%
+  forecast(h = 10) %>%
+  autoplot(new_tsbble) +
+  scale_y_log10()
+```
+
+```{r}
+# 自动选择模型
+new_tsbble %>%
+  model(ETS(new)) %>% 
+  report()
+
+new_tsbble %>%
+  model(ETS(new)) %>% 
+  components() %>% 
+  autoplot()
+```
+
+```{r}
+new_tsbble %>% 
+  ACF(new) %>% 
+  autoplot()
+new_tsbble %>% 
+  ACF(difference(new)) %>% 
+  autoplot()
+```
+
+```{r}
+new_tsbble %>%
+  mutate(diff_new = difference(new)) %>%
+  features(diff_new, ljung_box, lag = 10)
+```
+
