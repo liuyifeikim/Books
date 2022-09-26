@@ -6,7 +6,8 @@ date: '2022-09-13'
 
 
 ```{r global options}
-knitr::opts_chunk$set(fig.width = 20, fig.height = 8)
+library(knitr)
+opts_chunk$set(fig.width = 20, fig.height = 8)
 ```
 
 
@@ -519,5 +520,79 @@ new_tsbble %>%
 new_tsbble %>%
   mutate(diff_new = difference(new)) %>%
   features(diff_new, ljung_box, lag = 10)
+```
+
+```{r}
+# Unit root tests
+new_tsbble %>%
+  features(new, unitroot_kpss) # 结果显著则拒绝序列为平稳的假设，不显著则序列可能为平稳，若结果显著则取差分，直到不显著
+
+new_tsbble %>%
+  mutate(new_diff = difference(new)) %>% 
+  features(new_diff, unitroot_kpss) 
+
+new_tsbble %>%
+  features(new, unitroot_nsdiffs) # 计算取多少阶的季节差分
+
+new_tsbble %>%
+  features(new, unitroot_ndiffs) # 计算取多少阶的差分，计算季节差分后再计算一般差分
+```
+
+```{r}
+# ARIMA
+fit <- new_tsbble %>% 
+  model(ARIMA(new))
+report(fit)
+```
+
+```{r}
+fit %>% 
+  forecast(h=20) %>%
+  autoplot(new_tsbble) +
+  scale_y_log10()
+```
+
+```{r}
+# ARIMA建模全流程：https://otexts.com/fpp3/arima-r.html
+
+# Plot the data and identify any unusual observations.
+new_tsbble %>% autoplot(new)
+
+# If necessary, transform the data (using a Box-Cox transformation) to stabilise the variance.
+lambda <- new_tsbble %>%
+  features(new, features = guerrero) %>%
+  pull(lambda_guerrero)
+
+new_tsbble %>% autoplot(box_cox(new, lambda))
+
+# If the data are non-stationary, take first differences of the data until the data are stationary.
+new_tsbble %>% features(new, unitroot_kpss) # 平稳序列，不需要差分
+
+# Examine the ACF/PACF: Is an ARIMA(p,d,0) or ARIMA(0,d,q) model appropriate?
+new_tsbble %>%
+  gg_tsdisplay(new, plot_type='partial')
+
+# Try your chosen model(s), and use the AICc to search for a better model.
+new_fit <- new_tsbble %>% 
+  model(arima210 = ARIMA(new ~ pdq(2,1,0)),
+        arima011 = ARIMA(new ~ pdq(0,1,1)),
+        stepwise = ARIMA(new),
+        search = ARIMA(new, stepwise=FALSE))
+glance(new_fit) %>% arrange(AICc) %>% select(.model:BIC) # 选择AICc最小的模型
+
+# Check the residuals from your chosen model by plotting the ACF of the residuals, and doing a portmanteau test of the residuals. If they do not look like white noise, try a modified model.
+new_fit %>%
+  select(stepwise) %>%
+  gg_tsresiduals()
+
+augment(new_fit) %>%
+  filter(.model=='stepwise') %>%
+  features(.innov, ljung_box, lag = 10, dof = 3) # 检查误差项是否白噪音
+
+# Once the residuals look like white noise, calculate forecasts.
+new_fit %>%
+  forecast(h=20) %>%
+  filter(.model=='stepwise') %>%
+  autoplot(new_tsbble)
 ```
 
