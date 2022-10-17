@@ -1,0 +1,1277 @@
+---
+title: "Untitled"
+output: html_document
+date: '2022-10-08'
+---
+
+
+https://github.com/business-science/free_r_tips
+
+
+# 001_read_multiple_files
+
+```{r}
+library(tidyverse)
+library(fs)
+```
+
+```{r}
+# 分割数据并导出
+mpg %>%
+    group_by(manufacturer) %>%
+    group_split() %>%
+    walk(function(x) {
+        write_csv(x, path = str_c("./001_read_multiple_files/", unique(x$manufacturer), ".csv"))
+    })
+```
+
+```{r}
+file_paths <- fs::dir_ls("001_read_multiple_files")
+file_paths
+```
+
+```{r}
+file_contents <- list()
+for (i in seq_along(file_paths)) {
+    file_contents[[i]] <- read_csv(
+        file = file_paths[[i]]
+    )
+}
+file_contents <- set_names(file_contents, file_paths)
+file_contents
+```
+
+```{r}
+file_paths %>%
+    map(function(path) {
+        read_csv(path)
+    })
+```
+
+
+# 002_scraping_word_docs
+
+```{r}
+library(officer)
+library(janitor)
+library(ggtext)
+library(tidyverse)
+```
+
+```{r}
+doc <- read_docx("002_scraping_word_docs/Business Science.docx")
+doc
+```
+
+
+```{r}
+content_tbl <- docx_summary(doc) %>% as_tibble()
+content_tbl
+table_content_tbl <- content_tbl %>% filter(content_type == "table cell")
+table_content_tbl
+```
+
+```{r}
+table_header <- table_content_tbl %>%
+    filter(is_header) %>%
+    pull(text)
+table_header
+```
+
+
+```{r}
+lecture_analysis_tbl <- table_content_tbl %>%
+    filter(!is_header) %>%
+    select(text, row_id, cell_id) %>%
+    pivot_wider(names_from = cell_id, values_from = text) %>%
+    select(-row_id) %>%
+    mutate(across(.cols = -1, .fns = parse_number)) %>%
+    set_names(table_header) %>%
+    clean_names() %>%
+    mutate(activity_ratio = lectures_completed / students)
+lecture_analysis_tbl
+```
+
+```{r}
+lecture_analysis_tbl %>%
+    ggplot(aes(students, lectures_completed)) +
+    geom_point(aes(size = activity_ratio)) +
+    geom_smooth(method = "loess") +
+    geom_richtext(
+        aes(label = str_glue("___Course: {course}___<br>Ratio: {round(activity_ratio)}")),
+        vjust = "inward", hjust = "inward", size = 3.5
+    ) +
+    labs(
+        title = "Lessons Completed Vs Students",
+        x = "No. of Students", y = "No. of Lessons Completed"
+    ) +
+    scale_y_continuous(label = scales::comma) +
+    expand_limits(y = 0) +
+    theme_minimal()
+```
+
+# 003_powerpoint_slidedeck
+
+```{r}
+library(officer)
+library(flextable)
+library(tidyverse)
+library(tidyquant)
+library(timetk)
+```
+
+```{r}
+# stock_data_tbl <- c("AAPL", "GOOG", "FB", "NVDA") %>% tq_get(from = "2019-01-01", to = "2020-08-31")
+# stock_data_tbl
+```
+
+
+# 008_tidyverse_relocate
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+mpg
+```
+
+```{r}
+mpg %>% select(model, manufacturer, class, year)
+mpg %>% relocate(model, manufacturer, class, year)
+```
+
+
+```{r}
+mpg %>% relocate(manufacturer, .after = class)
+mpg %>% relocate(manufacturer, .after = last_col())
+mpg %>% relocate(manufacturer, .after = last_col(offset = 1))
+```
+
+
+```{r}
+mpg %>% relocate(where(is.numeric))
+mpg %>% relocate(where(is.character))
+mpg %>% relocate(where(is.character), .after = last_col())
+mpg %>% relocate(starts_with("m"), .before = year)
+```
+
+# 009_tidyverse_across
+
+```{r}
+library(tidyverse)
+```
+
+```{r}
+mpg %>% View()
+```
+
+```{r}
+mpg %>%
+    group_by(class) %>%
+    summarise(
+        across(cty, .fns = mean),
+        .groups = "drop"
+    )
+```
+
+```{r}
+mpg %>%
+    group_by(class) %>%
+    summarise(
+        across(cty, .fns = list(mean = mean, stdev = sd)), .groups = "drop"
+    )
+```
+
+```{r}
+mpg %>%
+    group_by(class) %>%
+    summarise(
+        across(c(cty, hwy), .fns = list(mean = mean, stdev = sd)), .groups = "drop"
+    )
+```
+
+```{r}
+mpg %>%
+    group_by(class) %>%
+    summarise(
+        across(
+            c(cty, hwy),
+            .fns = list(mean = mean, stdev = sd),
+            .names = "{.fn} {.col} Consumption"
+        ),
+        .groups = "drop"
+    ) %>%
+    rename_with(.fn = str_to_upper)
+```
+
+```{r}
+mpg %>%
+    group_by(class) %>%
+    summarise(
+        across(
+            c(cty, hwy),
+            .fns = list(
+                "mean"     = ~ mean(.x),
+                "range lo" = ~ (mean(.x) - 2*sd(.x)),
+                "range hi" = ~ (mean(.x) + 2*sd(.x))
+            ),
+            .names = "{.fn} {.col}"
+        ),
+        .groups = "drop"
+    ) %>%
+    rename_with(.fn = str_to_upper)
+```
+
+
+# 010_tidyverse_pivot
+
+```{r}
+library(tidyquant)
+library(tidyverse)
+```
+
+```{r}
+mpg_pivot_table_1 <- mpg %>%
+    group_by(manufacturer) %>%
+    count(class, name = "n") %>%
+    ungroup() %>%
+    pivot_wider(
+        names_from  = class,
+        values_from = n,
+        values_fill = 0
+    )
+mpg_pivot_table_1
+```
+
+
+```{r}
+mpg_pivot_table_2 <- mpg %>%
+    pivot_table(
+        .columns = class,
+        .rows    = manufacturer,
+        .values  = ~ n(),
+        fill_na  = 0
+    )
+mpg_pivot_table_2
+```
+
+```{r}
+mpg %>%
+    pivot_table(
+        .rows    = class,
+        .values  = ~ list(lm(hwy ~ displ + cyl - 1))
+    )
+```
+
+
+```{r}
+mpg_long_summary_table <- mpg_pivot_table_1 %>%
+    pivot_longer(
+        cols      = compact:subcompact,
+        names_to  = "class",
+        values_to = "value"
+    )
+mpg_long_summary_table
+```
+
+```{r}
+mpg_long_summary_table %>%
+    ggplot(aes(class, manufacturer, fill = value)) +
+    geom_tile() +
+    geom_label(aes(label = value), fill = "white") +
+    scale_fill_viridis_c() +
+    theme_minimal() +
+    labs(title = "Class by Auto Manufacturer")
+```
+
+# 011_group_split_linear_regression
+
+```{r}
+library(tidyquant)
+library(tidyverse)
+library(broom)
+```
+
+```{r}
+# devtools::install_github("rstudio/fontawesome")
+library(gt)
+library(fontawesome)
+library(htmltools)
+```
+
+```{r}
+mpg
+```
+
+
+```{r}
+mpg %>%
+    mutate(manufacturer = as_factor(manufacturer)) %>%
+    group_by(manufacturer) %>%
+    group_split()
+```
+
+
+```{r}
+mpg %>%
+    mutate(manufacturer = as_factor(manufacturer)) %>%
+    group_by(manufacturer) %>%
+    group_split() %>%
+    map(.f = function(df) {
+        lm(hwy ~ cty, data = df)
+    })
+```
+
+```{r}
+hwy_vs_city_tbl <- mpg %>%
+    mutate(manufacturer = as_factor(manufacturer)) %>%
+    group_by(manufacturer) %>%
+    group_split() %>%
+    map_dfr(.f = function(df) {
+        lm(hwy ~ cty, data = df) %>%
+            glance() %>%
+            add_column(manufacturer = unique(df$manufacturer), .before = 1)
+    })
+hwy_vs_city_tbl
+```
+
+
+```{r}
+rating_stars <- function(rating, max_rating = 5) {
+    rounded_rating <- floor(rating + 0.5)  # always round up
+    stars <- lapply(seq_len(max_rating), function(i) {
+        if (i <= rounded_rating) {
+            fontawesome::fa("star", fill= "orange")
+        } else {
+            fontawesome::fa("star", fill= "grey")
+        }
+    })
+    label <- sprintf("%s out of %s", rating, max_rating)
+    div_out <- div(title = label, "aria-label" = label, role = "img", stars)
+    as.character(div_out) %>%
+        gt::html()
+}
+rating_stars
+```
+
+
+```{r}
+hwy_vs_city_tbl %>%
+    select(manufacturer, nobs, r.squared, adj.r.squared, p.value) %>%
+    mutate(manufacturer = str_to_title(manufacturer)) %>%
+    mutate(rating = cut_number(r.squared, n = 5) %>% as.numeric()) %>%
+    mutate(rating = map(rating, rating_stars)) %>%
+    arrange(desc(r.squared)) %>%
+    gt() %>%
+    tab_header(title = gt::md("__Highway vs City Fuel Mileage__")) %>%
+    tab_spanner(
+        label = gt::html("<small>Relationship Strength (hwy ~ cty)</small>"),
+        columns = vars(r.squared, adj.r.squared, p.value)
+    ) %>%
+    fmt_number(columns = vars(r.squared, adj.r.squared)) %>%
+    fmt_number(columns = vars(p.value), decimals = 3) %>%
+    tab_style(
+        style = cell_text(size = px(12)),
+        locations = cells_body(
+            columns = vars(r.squared, adj.r.squared, p.value))
+    ) %>%
+    cols_label(
+        manufacturer = gt::md("__MFG__"),
+        nobs = gt::md("__#__"),
+        r.squared = gt::html(glue::glue("<strong>R-Squared ", fontawesome::fa("arrow-down", fill = "orange"), "</strong>")),
+        adj.r.squared = gt::md("__R-Squared (Adj)__"),
+        p.value = gt::md("__P-Value__"),
+        rating  = gt::md("__Rating__")
+    )
+```
+
+# 012_nest_arima
+
+```{r}
+library(modeltime)
+library(tidymodels)
+library(timetk)
+library(tidyverse)
+```
+
+```{r}
+walmart_sales_weekly
+```
+
+
+```{r}
+walmart_sales_weekly %>%
+    group_by(id) %>%
+    plot_time_series(Date, Weekly_Sales, .facet_ncol = 2)
+```
+
+```{r}
+data_nested <- walmart_sales_weekly %>%
+    select(id, Date, Weekly_Sales) %>%
+    nest(nested_column = -id)
+data_nested$nested_column
+```
+
+
+```{r}
+data_nested %>%
+    unnest(nested_column)
+```
+
+
+```{r}
+model_table <- data_nested %>%
+    mutate(fitted_model = map(nested_column, .f = function(df) {
+        arima_reg(seasonal_period = 52) %>%
+            set_engine("auto_arima") %>%
+            fit(Weekly_Sales ~ Date, data = df)
+    })) %>%
+    mutate(nested_forecast = map2(fitted_model, nested_column,
+                                  .f = function(arima_model, df) {
+        modeltime_table(
+            arima_model
+        ) %>%
+            modeltime_forecast(
+                h = 52,
+                actual_data = df
+            )
+    }))
+model_table
+```
+
+```{r}
+model_table %>%
+    select(id, nested_forecast) %>%
+    unnest(nested_forecast) %>%
+    group_by(id) %>%
+    plot_modeltime_forecast(.facet_ncol = 2)
+```
+
+# 013_ggplot2_maps
+
+```{r}
+library(tidyverse)
+library(maps)
+library(mapproj)
+```
+
+```{r}
+world_tbl <- map_data("world") %>%
+    as_tibble()
+world_tbl
+```
+
+
+```{r}
+world_base <- world_tbl %>%
+    ggplot() +
+    geom_map(
+        aes(long, lat, map_id = region),
+        map = world_tbl,
+        color = "gray80", fill = "gray30", size = 0.3
+    )
+world_base
+```
+
+
+```{r}
+world_base +
+    coord_map("ortho", orientation = c(39, -98, 0))
+```
+
+
+```{r}
+usa_tbl <- map_data("state") %>% as_tibble()
+usa_tbl %>%
+    ggplot(aes(long, lat, map_id = region)) +
+    geom_map(
+        map = usa_tbl,
+        color = "gray80", fill = "gray30", size = 0.3
+    ) +
+    coord_map("ortho", orientation = c(39, -98, 0))
+```
+
+```{r}
+republican_voting_tbl <- maps::votes.repub %>%
+    as_tibble(rownames = "state") %>%
+    select(state, `1976`) %>%
+    rename(repub_prop = `1976`) %>%
+    mutate(repub_prop = repub_prop / 100) %>%
+    mutate(state = str_to_lower(state))
+
+usa_voting_tbl <- usa_tbl %>%
+    left_join(republican_voting_tbl, by = c("region" = "state"))
+
+usa_voting_tbl
+```
+
+```{r}
+usa_voting_tbl %>%
+    ggplot(aes(long, lat, group = subregion)) +
+    geom_map(
+        aes(map_id = region),
+        map = usa_tbl,
+        color = "gray80", fill = "gray30", size = 0.3
+    ) +
+    coord_map("ortho", orientation = c(39, -98, 0)) +
+    geom_polygon(aes(group = group, fill = repub_prop), color = "black") +
+    scale_fill_gradient2(low = "blue", mid = "white", high = "red",
+                         midpoint = 0.5, labels = scales::percent) +
+    theme_minimal() +
+    labs(
+        title = "Voting Republican in 1976",
+        x = "", y = "", fill = ""
+    ) +
+    theme(
+        plot.title = element_text(size = 26, face = "bold", color = "red3"),
+        legend.position = "bottom"
+    )
+```
+
+# 014_visualize_pca
+
+```{r}
+library(broom)
+library(ggfortify)
+library(plotly)
+library(tidyverse)
+```
+
+
+```{r}
+y_tbl <- mpg %>%
+    select(manufacturer, model) %>%
+    mutate(vehicle = str_c(manufacturer, "_", model)) %>%
+    rowid_to_column()
+y_tbl
+```
+
+```{r}
+x_tbl <- mpg %>%
+    select(displ:class) %>%
+    rowid_to_column() %>%
+
+    # One Hot Encode: transmission
+    mutate(
+        trans_auto = str_detect(trans, "auto") %>% as.numeric(),
+        trans_man  = str_detect(trans, "man") %>% as.numeric()
+    ) %>%
+    select(-trans) %>%
+
+    # One Hot Encode: drv
+    mutate(val_drv = 1) %>%
+    pivot_wider(
+        names_from  = drv,
+        values_from = val_drv,
+        values_fill = 0,
+        names_prefix = "drv_"
+    ) %>%
+
+    # One Hot Encode: class
+    mutate(val_class = 1) %>%
+    pivot_wider(
+        names_from  = class,
+        values_from = val_class,
+        values_fill = 0,
+        names_prefix = "class_"
+    ) %>%
+
+    # One Hot Encode: fl
+    mutate(val_fl = 1) %>%
+    pivot_wider(
+        names_from  = fl,
+        values_from = val_fl,
+        values_fill = 0,
+        names_prefix = "fl_"
+    )
+
+x_tbl %>% glimpse()
+```
+
+
+```{r}
+fit_pca <- prcomp(
+    formula = ~ . - rowid,
+    data    = x_tbl,
+    scale.  = TRUE
+)
+fit_pca
+fit_pca %>% tidy()
+```
+
+
+```{r}
+g <- autoplot(
+
+    object = fit_pca,
+    x = 1,
+    y = 2,
+
+    # Labels
+    data = y_tbl,
+    label = TRUE,
+    label.label = "vehicle",
+    label.size = 3,
+
+    # LOADINGS
+    loadings.label = TRUE,
+    loadings.label.size = 7,
+
+    scale = 0
+) +
+    labs(title = "Visualizing PCA in R")+
+    theme_minimal()
+
+g
+
+plotly::ggplotly(g)
+```
+
+# 015_logistic_regression
+
+```{r}
+library(tidymodels)
+library(vip)
+library(tidyverse)
+```
+
+```{r}
+data_prepared_tbl <- mpg %>%
+    select(displ:class) %>%
+    mutate(trans = ifelse(str_detect(trans, "auto"), "auto", "manual")) %>%
+    relocate(year, .before = 1) %>%
+    mutate(year = as.factor(year))
+data_prepared_tbl
+```
+
+```{r}
+set.seed(123)
+splits <- data_prepared_tbl %>%
+    initial_split(prop = 0.80)
+splits
+```
+
+```{r}
+model_fit_glm <- logistic_reg() %>%
+    set_engine("glm") %>%
+    fit(year ~ . , data = training(splits))
+model_fit_glm
+```
+
+```{r}
+prediction_class_test <- predict(model_fit_glm, new_data = testing(splits), type = "class")
+prediction_prob_test  <- predict(model_fit_glm, new_data = testing(splits), type = "prob")
+results_tbl <- bind_cols(
+    prediction_class_test,
+    prediction_prob_test,
+    testing(splits)
+)
+results_tbl
+```
+
+```{r}
+results_tbl %>%
+    roc_auc(year, .pred_1999)
+results_tbl %>%
+    roc_curve(year, .pred_1999) %>%
+    autoplot(
+        options = list(
+            smooth = TRUE
+        )
+    ) +
+    labs(title = "Area Under the Curve (AUC): 0.752")
+```
+
+
+```{r}
+model_fit_glm$fit %>%
+    vip(
+        num_features = 20,
+        geom         = "point",
+        aesthetics   = list(
+            size     = 4,
+            color    = "#18bc9c"
+        )
+    ) +
+    theme_minimal(base_size = 18) +
+    labs(title = "Logistic Regression: Feature Importance")
+```
+
+
+```{r}
+data_prepared_tbl %>%
+    ggplot(aes(class, hwy, color = year)) +
+    geom_boxplot() +
+    geom_jitter(alpha = 0.25) +
+    theme_minimal(base_size = 18) +
+    scale_color_viridis_d(end = 0.4) +
+    labs(title = "Older Vehicles have Lower Fuel Economy")
+```
+
+# 016_cyberpunk_ggplot
+
+```{r}
+library(plotly)
+library(tidyverse)
+library(timetk)
+```
+
+```{r}
+walmart_sales_weekly
+```
+
+```{r}
+g1 <- walmart_sales_weekly %>%
+    group_by(id) %>%
+    plot_time_series(
+        .date_var    = Date,
+        .value       = Weekly_Sales,
+        .color_var   = id,
+        .smooth      = TRUE,
+        .facet_ncol  = 3,
+        .interactive = FALSE
+    )
+g1
+```
+
+
+```{r}
+walmart_sales_weekly %>%
+    ggplot(aes(Date, Weekly_Sales, color = id, group = id)) +
+    geom_line() +
+    geom_smooth(
+        aes(Date, Weekly_Sales),
+        inherit.aes = FALSE,
+        se = FALSE
+    ) +
+    facet_wrap(
+        facets = ~ id,
+        scales = "free_y",
+        ncol   = 2
+    ) +
+    theme_minimal() +
+    theme(legend.position = "bottom")
+```
+
+```{r}
+clrs <- colorRampPalette(c("#00ff9f", "#00b8ff", "#001eff", "#bd00ff", "#d600ff"))(7)
+scales::show_col(clrs)
+clr_bg   <- "black"
+clr_bg2  <- "gray10"
+clr_grid <- "gray30"
+clr_text <- "#d600ff"
+# * Setup a ggplot theme ----
+theme_cyberpunk <- function() {
+    theme(
+        # Plot / Panel
+        plot.background = element_rect(fill = clr_bg, colour = clr_bg),
+        # plot.margin = margin(1.5, 2, 1.5, 1.5, "cm"),
+        panel.background = element_rect(fill = clr_bg, color = clr_bg),
+        # Grid
+        panel.grid = element_line(colour = clr_grid, size = 1),
+        panel.grid.major = element_line(colour = clr_grid, size = 1),
+        panel.grid.minor = element_line(colour = clr_grid, size = 1),
+        axis.ticks.x = element_line(colour = clr_grid, size = 1),
+        axis.line.y = element_line(colour = clr_grid, size = 0.5),
+        axis.line.x = element_line(colour = clr_grid, size = 0.5),
+        # Text
+        plot.title = element_text(colour = clr_text),
+        plot.subtitle = element_text(colour = clr_text),
+        axis.text = element_text(colour = clr_text),
+        axis.title = element_text(colour = clr_text),
+        # Legend
+        legend.background = element_blank(),
+        legend.key = element_blank(),
+        legend.title = element_text(colour = clr_text),
+        legend.text = element_text(colour = "gray80", size = 12, face = "bold"),
+        # Strip
+        strip.background = element_rect(fill = clr_bg2, color = clr_bg2)
+    )
+}
+```
+
+
+```{r}
+g_cyberpunk <- g1 +
+    geom_area(position = "identity", alpha = 0.5) +
+    geom_line(aes(color = id), size = 1) +
+    scale_color_manual(values = clrs) +
+    geom_smooth(
+        aes(Date, Weekly_Sales),
+        inherit.aes = FALSE,
+        se = FALSE
+    ) +
+    scale_y_continuous(labels = scales::dollar) +
+    # facet_wrap(facets = NULL) +
+    labs(title = "Cyberpunk 2077 Theme", subtitle = "Time Series Plot") +
+    theme_cyberpunk()
+g_cyberpunk
+ggplotly(g_cyberpunk)
+```
+
+# 017_keyboard_shortcuts
+
+```{r}
+library(tidyverse)
+library(timetk)
+library(modeltime)
+```
+
+```{r}
+m4_monthly %>%
+    group_by(id) %>%
+    plot_time_series(date, value)
+```
+
+```{r}
+a <- 1
+
+add2 <- function(x, y) {
+    x + y
+}
+
+add2(3, 4)
+```
+
+# 018_rayshader
+
+```{r}
+library(rayshader)
+library(tidyverse)
+```
+
+
+```{r}
+g1 <- mtcars %>%
+    ggplot(aes(disp, mpg, color = cyl)) +
+    geom_point(size=2) +
+    scale_color_continuous(limits=c(0,8)) +
+    ggtitle("mtcars: Displacement vs mpg vs # of cylinders") +
+    theme(title = element_text(size=8),
+          text = element_text(size=12))
+g1
+```
+
+
+```{r}
+g1 %>%
+    plot_gg(
+        height        = 3,
+        width         = 3.5,
+        multicore     = TRUE,
+        pointcontract = 0.7,
+        soliddepth    = -200
+    )
+render_camera(zoom = 0.75, theta = -30, phi = 30)
+render_snapshot(clear = FALSE)
+```
+
+```{r}
+volcano
+volcano %>% class()
+volcano_tbl <- volcano %>%
+    as_tibble(.name_repair = "minimal") %>%
+    set_names(str_c("V", seq_along(names(.)))) %>%
+    rowid_to_column(var = "x") %>%
+    pivot_longer(
+        cols      = contains("V"),
+        names_to  = "y",
+        values_to = "value"
+    ) %>%
+    mutate(y = str_remove(y, "^V") %>% as.numeric())
+volcano_tbl
+```
+
+
+```{r}
+g2 <- volcano_tbl %>%
+    ggplot(aes(x = x, y = y, fill = value)) +
+    geom_tile() +
+    geom_contour(aes(z = value), color = "black") +
+    scale_x_continuous("X", expand = c(0,0)) +
+    scale_y_continuous("Y",expand = c(0,0)) +
+    scale_fill_gradientn("Z", colours = terrain.colors(10)) +
+    coord_fixed()
+g2
+```
+
+```{r}
+g2 %>%
+    plot_gg(
+        multicore = TRUE,
+        raytrace = TRUE,
+        width = 7,
+        height = 4,
+        scale = 300,
+        windowsize = c(1400, 866),
+        zoom = 0.6,
+        phi = 30,
+        theta = 30
+    )
+```
+
+```{r}
+volcano %>%
+    sphere_shade() %>%
+    plot_3d(volcano, zscale = 3)
+```
+
+# 019_missing_data
+
+```{r}
+library(visdat)
+library(naniar)
+library(simputation)
+library(tidyverse)
+```
+
+
+```{r}
+air_quality_tbl <- airquality %>% as_tibble()
+air_quality_tbl
+```
+
+```{r}
+air_quality_tbl %>% vis_dat()
+air_quality_tbl %>% vis_miss()
+air_quality_tbl %>% gg_miss_upset()
+```
+
+```{r}
+air_quality_tbl %>%
+    ggplot(aes(x = Solar.R, y = Ozone)) +
+    geom_miss_point()
+```
+
+
+```{r}
+air_quality_tbl %>%
+    # Label if Ozone is missing
+    add_label_missings(Ozone) %>%
+    # Imputation - Linear Regression
+    mutate(Ozone = as.double(Ozone)) %>%
+    impute_lm(Ozone ~ Temp + Wind) %>%
+    # Visualize
+    ggplot(aes(Solar.R, Ozone, color = any_missing)) +
+    geom_point()
+```
+
+```{r}
+air_quality_tbl %>%
+    # Label if Ozone is missing
+    add_label_missings(Ozone) %>%
+    # Imputation - Ozone
+    mutate(Ozone = as.double(Ozone)) %>%
+    impute_rf(Ozone ~ Temp + Wind) %>%
+    # Imputation - Solar.R
+    mutate(Solar.R = as.double(Solar.R)) %>%
+    impute_rf(Solar.R ~ Temp + Wind) %>%
+    # Visualize
+    ggplot(aes(Solar.R, Ozone, color = any_missing)) +
+    geom_point()
+```
+
+# 021_make_dataframes_in_r
+
+```{r}
+library(readxl)
+library(writexl)
+library(plotly)
+library(tidyverse)
+```
+
+```{r}
+df <- tibble(a = 1:10)
+class(df)
+is.data.frame(df)
+```
+
+```{r}
+interest_rate_tbl <- readxl::read_xlsx("021_make_dataframes_in_r/interest_rate.xlsx",sheet = 1)
+interest_rate_tbl
+g <- interest_rate_tbl %>%
+    ggplot(aes(date, interest_rate)) +
+    geom_line() +
+    geom_hline(yintercept = 0, color = "gray50")
+ggplotly(g)
+```
+
+
+```{r}
+moneyball_list <- list(
+    user_name = c("Bill James",
+                  "Billy Beane",
+                  "Peter Brand",
+                  "Art Howe"),
+    email     = c(
+        "bill.james@gmail.com",
+        "billy.beane@gmail.com",
+        "peter.brand@harvard.edu",
+        "art.howe@hotmail.com"
+    ),
+    tags      = list(
+        list("writer", "baseball", "stats"),
+        list("GM", "baseball"),
+        list("analyst", "baseball", "stats"),
+        list("coach", "baseball")
+    )
+)
+moneyball_list
+moneyball_list %>% as_tibble()
+```
+
+```{r}
+enframe(c("blah", "blah", "blah"), name = "name", value = "contents") %>% deframe()
+enframe(moneyball_list) %>%
+    pivot_wider(
+        names_from  = name,
+        values_from = value
+    ) %>%
+    unnest(user_name:tags) %>%
+    unnest(tags) %>%
+    unnest(tags)
+```
+
+```{r}
+interest_rate_tbl <- tibble(
+    date          = timetk::tk_make_timeseries("2010", length_out = 12, by = "year"),
+    interest_rate = (seq(12, 3, length.out = 12) * (sin(1:12) + 2)) / 12
+)
+interest_rate_tbl %>% writexl::write_xlsx("021_make_dataframes_in_r/interest_rate.xlsx")
+```
+
+
+# 022_ggstatsplot
+
+```{r}
+library(ggstatsplot)
+library(tidyverse)
+```
+
+
+```{r}
+txhousing
+```
+
+
+```{r}
+set.seed(123)
+txhousing_sampled_tbl <- txhousing %>%
+    dplyr::sample_frac(size = 0.10)
+txhousing_sampled_tbl
+```
+
+
+```{r}
+txhousing_sampled_tbl %>%
+    ggcorrmat(
+        cor.vars    = sales:date,
+        matrix.type = "upper",
+        sig.level   = 0.05
+    )
+```
+
+
+```{r}
+top_5_cities <- txhousing_sampled_tbl %>%
+    count(city, sort = TRUE) %>%
+    slice(1:5) %>%
+    pull(city)
+top_5_cities
+```
+
+
+```{r}
+txhousing_sampled_tbl %>%
+    filter(city %in% top_5_cities) %>%
+    ggbetweenstats(
+        x = city,
+        y = median,
+        type = "robust",
+        # Tag outliers
+        outlier.tagging    = TRUE,
+        outlier.label.args = list(color = "red", size = 3),
+        title = "Comparison of Median Home Prices, Top 5 Texas Cities"
+    )
+```
+
+# 023_ppscore_vs_correlationfunnel
+
+```{r}
+library(ppsr) # devtools::install_github('https://github.com/paulvanderlaken/ppsr')
+library(correlationfunnel)
+library(tidyverse)
+```
+
+
+```{r}
+customer_churn_tbl %>% glimpse()
+```
+
+
+```{r}
+churn_ppsr_score <- customer_churn_tbl %>%
+    select(-customerID) %>%
+    score_predictors(y = 'Churn', do_parallel = TRUE) %>%
+    as_tibble()
+churn_ppsr_score %>% glimpse()
+churn_ppsr_score
+```
+
+```{r}
+customer_churn_tbl %>%
+    select(-customerID) %>%
+    visualize_pps(y = "Churn", do_parallel = TRUE)
+```
+
+
+```{r}
+g <- customer_churn_tbl %>%
+    select(-customerID) %>%
+    visualize_pps(do_parallel = TRUE)
+g + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+customer_churn_binned_tbl <- customer_churn_tbl %>%
+    select(-customerID) %>%
+    mutate(TotalCharges = ifelse(is.na(TotalCharges), 0, TotalCharges)) %>%
+    binarize()
+customer_churn_binned_tbl %>% glimpse()
+customer_churn_binned_tbl %>%
+    correlate(target = Churn__Yes) %>%
+    plot_correlation_funnel() +
+    geom_point(size = 3, color = "#2c3e50")
+```
+
+
+```{r}
+library(tidymodels)
+library(xgboost)
+library(vip)
+recipe_spec <- recipe(Churn ~ ., data = customer_churn_tbl) %>%
+    step_rm(customerID) %>%
+    step_dummy(all_nominal(), -Churn)
+recipe_spec %>% prep() %>% juice() %>% glimpse()
+wflw_fit_xgb <- workflow() %>%
+    add_model(boost_tree(mode = "classification") %>% set_engine("xgboost")) %>%
+    add_recipe(recipe_spec) %>%
+    fit(customer_churn_tbl)
+wflw_fit_xgb$fit$fit$fit %>% vip()
+```
+
+# 024_shiny_in_rmarkdown
+
+
+# 025_eda_dataexplorer
+
+```{r}
+library(DataExplorer)
+library(tidyverse)
+```
+
+```{r}
+gss_cat
+gss_cat %>% glimpse()
+```
+
+```{r}
+gss_cat %>%
+    create_report(
+        output_file  = "gss_survey_data_profile_report",
+        output_dir   = "025_eda_dataexplorer/",
+        y            = "rincome",
+        report_title = "EDA Report - GSS Demographic Survey"
+    )
+```
+
+```{r}
+gss_cat %>% introduce()
+gss_cat %>% plot_intro()
+```
+
+```{r}
+gss_cat %>% plot_missing()
+gss_cat %>% profile_missing()
+```
+
+```{r}
+gss_cat %>% plot_density()
+gss_cat %>% plot_histogram()
+```
+
+```{r}
+gss_cat %>% plot_bar()
+```
+
+```{r}
+gss_cat %>% plot_correlation(maxcat = 15)
+```
+
+# 026_eda_skimr
+
+```{r}
+library(skimr)
+library(tidyverse)
+```
+
+```{r}
+starwars
+```
+
+```{r}
+starwars %>% skim()
+starwars %>% filter(is.na(birth_year))
+```
+
+```{r}
+storms %>% skim()
+```
+
+```{r}
+economics %>% skim()
+economics_long %>% group_by(variable) %>% skim()
+```
+
+# 028_esquisse_ggplot_builder
+
+```{r}
+library(esquisse)
+library(modeldata)
+library(tidyverse)
+```
+
+
+```{r}
+data("drinks")
+data("mpg")
+drinks
+mpg
+```
+
+
+```{r}
+esquisser()
+```
+
+```{r}
+drinks %>%
+    filter(date >= "2005-01-14" & date <= "2014-01-22") %>%
+    ggplot() +
+    aes(x = date, y = S4248SM144NCEN) +
+    geom_line(size = 1.34, colour = "#909495") +
+    labs(title = "My awesome plot", subtitle = "This is a time series") +
+    theme_minimal()
+```
+
+```{r}
+ggplot(mpg) +
+    aes(x = displ, y = hwy, colour = drv) +
+    geom_point(size = 3L) +
+    geom_smooth(span = 1L) +
+    scale_color_viridis_d(option = "cividis") +
+    theme_minimal()
+```
+
