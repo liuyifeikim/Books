@@ -1275,3 +1275,1001 @@ ggplot(mpg) +
     theme_minimal()
 ```
 
+# 031_dtplyr
+
+```{r}
+library(tidyverse)
+library(dtplyr)
+library(tidyquant)
+```
+
+```{r}
+mpg_dt <- lazy_dt(mpg)
+mpg_dt
+```
+
+```{r}
+mpg_summary_dt <- mpg_dt %>%
+    group_by(manufacturer, cyl) %>%
+    summarise(across(
+        .cols  = c(displ, cty:hwy),
+        .fns   = list(mean, median),
+        .names = "{.fn}_{.col}"
+    )) %>%
+    ungroup()
+mpg_summary_dt
+```
+
+```{r}
+mpg_summary_dt %>% show_query()
+mpg_summary_tbl <- mpg_summary_dt %>% collect()
+mpg_summary_tbl
+```
+
+```{r}
+mpg_summary_tbl %>%
+    ggplot(aes(manufacturer, factor(cyl), fill = mean_cty)) +
+    geom_tile() +
+    geom_text(aes(label = round(mean_cty, 1)), size = 3) +
+    scale_fill_viridis_c(direction = 1) +
+    labs(title = "Average City Fuel Mileage by Engine Size (Cylinders)",
+         x = "Manufacturer", y = "Engine Size (Cylinders",
+         fill = "Average City Mileage") +
+    coord_flip() +
+    tidyquant::theme_tq()
+```
+
+# 032_datapasta
+
+```{r}
+library(datapasta)
+library(tidyverse)
+library(lubridate)
+library(timetk)
+```
+
+
+```{r}
+stock_data <- tibble::tribble(
+                           ~Date,  ~Open,  ~High,   ~Low, ~`Close*`, ~`Adj.Close**`,     ~Volume,
+                  "Apr 12, 2021", 132.52, 132.85, 130.63,    131.24,         131.24,    91286600,
+                  "Apr 09, 2021",  129.8, 133.04, 129.47,       133,            133,   106513800,
+                  "Apr 08, 2021", 128.95, 130.39, 128.52,    130.36,         130.36,    88844600,
+                  "Apr 07, 2021", 125.83, 127.92, 125.14,     127.9,          127.9,    83466700,
+                  "Apr 06, 2021",  126.5, 127.13, 125.65,    126.21,         126.21,    80171300,
+                  "Apr 05, 2021", 123.87, 126.16, 123.07,     125.9,          125.9,    88651200,
+                  "Apr 01, 2021", 123.66, 124.18, 122.49,       123,            123,    74957400,
+                  "Mar 31, 2021", 121.65, 123.52, 121.15,    122.15,         122.15,   118323800,
+                  "Mar 30, 2021", 120.11,  120.4, 118.86,     119.9,          119.9,    85671900,
+                  "Mar 29, 2021", 121.65, 122.58, 120.73,    121.39,         121.39,    80819200,
+                  "Mar 26, 2021", 120.35, 121.48, 118.92,    121.21,         121.21,    93958900,
+                  "Mar 25, 2021", 119.54, 121.66,    119,    120.59,         120.59,    98844700,
+                  "Mar 24, 2021", 122.82,  122.9, 120.07,    120.09,         120.09,    88530500,
+                  "Mar 23, 2021", 123.33, 124.24, 122.14,    122.54,         122.54,    95467100,
+                  "Mar 22, 2021", 120.33, 123.87, 120.26,    123.39,         123.39,   111912300
+                  )
+stock_data %>%
+    mutate(Date = mdy(Date)) %>%
+    plot_time_series(Date, Volume)
+```
+
+
+```{r}
+largest_companies_dt <- data.table::data.table(
+                                  V1 = c(1L,2L,3L,4L,5L,6L,7L,8L,9L,
+                                         10L),
+                                  V2 = c("Walmart","Sinopec Group",
+                                         "Amazon","State Grid",
+                                         "China National Petroleum","Royal Dutch Shell",
+                                         "Saudi Aramco","Volkswagen","BP","Toyota"),
+                                  V3 = c("Retail","Oil and gas","Retail",
+                                         "Electricity","Oil and gas",
+                                         "Oil and gas","Oil and gas","Automotive",
+                                         "Oil and gas","Automotive"),
+                                  V4 = c("Increase $559,200",
+                                         "Decrease $407,009","Increase $386,064",
+                                         "Decrease $383,906","Decrease $379,130",
+                                         "Decrease $344,379","Decrease $329,784",
+                                         "Increase $282,760","Decrease $282,610",
+                                         "Increase $275,288"),
+                                  V5 = c("$19,742","$6,793","$17,377",
+                                         "$7,970","$4,433","$15,842","$88,211",
+                                         "$15,542","$4,026","$19,096"),
+                                  V6 = c(2200000,582648,1125300,907677,
+                                         1344410,83000,79000,671205,72500,
+                                         359542),
+                                  V7 = c("United States United States",
+                                         "China China",
+                                         "United States United States","China China","China China",
+                                         "Netherlands Netherlands",
+                                         "Saudi Arabia Saudi Arabia","Germany Germany",
+                                         "United Kingdom United Kingdom","Japan Japan"),
+                                  V8 = c("[4]","[5]","[6]","[7]","[8]",
+                                         "[9]","[10]","[11]","[12]","[13]")
+                        )
+largest_companies_dt
+largest_companies_dt %>%
+    mutate(
+        V4 = parse_number(V4),
+        V2 = as_factor(V2) %>% fct_rev()
+    ) %>% 
+  as.data.frame() %>% 
+    ggplot(aes(V4, V2)) +
+    geom_col(aes(fill = V4)) +
+    geom_label(aes(label = scales::dollar_format()(V4)), hjust=1) +
+    theme_minimal() +
+    scale_x_continuous(labels = scales::dollar_format()) +
+    labs(title = "Revenue (Millions) for Largest Companies") +
+    theme(legend.position = 'none')
+```
+
+# 033_corrmorant
+
+```{r}
+library(corrmorant)
+library(tidyverse)
+```
+
+```{r}
+corrmorant(mpg)
+corrmorant(mpg, style = "dark")
+corrmorant(mpg, style = "dark") +
+    theme_dark() +
+    labs(title = "Correlations")
+```
+
+
+```{r}
+ggcorrm(data = mpg) +
+    lotri(geom_point(alpha = 0.5)) +
+    lotri(geom_smooth()) +
+    utri_heatmap() +
+    utri_corrtext() +
+    dia_names(y_pos = 0.15, size = 3) +
+    dia_histogram(lower = 0.3, fill = "grey80", color = 1) +
+    scale_fill_corr() +
+    labs(title = "Correlation Plot")
+```
+
+
+```{r}
+corfun <- function(x, y)  round(cor(x, y,method = "pearson", use = "pairwise.complete.obs"), 2)
+ggcorrm(
+        mapping = aes(col = cyl, fill = cyl),
+        data    = mpg %>% mutate(cyl = factor(cyl)),
+        bg_dia  = "grey30"
+    ) +
+    lotri(geom_point(alpha = 0.5)) +
+    lotri(geom_smooth(se=F, method = "lm")) +
+    utri_funtext(fun = corfun, size = 6) +
+    dia_names(y_pos = 0.15, size = 3) +
+    dia_density(lower = 0.3, fill = "grey60", color = 1) +
+    theme_dark() +
+    scale_color_viridis_d() +
+    scale_fill_viridis_d() +
+    labs(title = "Correlation Plot")
+```
+
+# 034_mmtable2_ggplot_tables
+
+```{r}
+library(mmtable2)
+library(gt)
+library(tidyverse)
+```
+
+```{r}
+data_wrangled <- mpg %>%
+    group_by(manufacturer, cyl) %>%
+    summarise(across(.cols = c(cty, hwy), .fns = mean)) %>%
+    ungroup() %>%
+    pivot_longer(
+        cols = c(cty, hwy),
+        names_to = "fuel_economy_type",
+        values_to = "fuel_economy"
+    )
+data_wrangled
+```
+
+```{r}
+main_table <- data_wrangled %>%
+    mutate(fuel_economy = round(fuel_economy, 1)) %>%
+    mmtable(cells = fuel_economy, table_name = "Fuel Economy") +
+    # Specify Headers
+    header_top(manufacturer) +
+    header_left(cyl) +
+    header_left_top(fuel_economy_type) +
+    # Specify formatting
+    header_format(manufacturer, list(cell_text(transform = "capitalize"))) +
+    header_format(fuel_economy_type, list(cell_text(transform = "uppercase"))) +
+    table_format(
+        locations = list(
+            cells_body(rows = c(2, 6))
+        ),
+        style     = list(
+            cell_borders(sides = "top", color = "grey")
+        )
+    )
+
+main_table %>%
+    gt::tab_header(
+        title = "Fuel Economy by Car Manufacturer",
+        subtitle = "Audi, VW, and Honda are leaders in Fuel Economy"
+    )
+```
+
+# 035_patchwork
+
+```{r}
+library(patchwork)
+library(ggridges)
+library(ggrepel)
+library(maps)
+library(tidyverse)
+library(lubridate)
+```
+
+```{r}
+txhousing_tbl <- txhousing %>%
+    mutate(date = lubridate::make_date(year, month))
+txhousing_tbl
+```
+
+```{r}
+gg_tx_timeseries <- txhousing_tbl %>%
+    ggplot(aes(date, median, group = city)) +
+    geom_line(color = "gray20", alpha = 0.25) +
+    geom_smooth(
+        aes(group = NULL),
+        method = "loess",
+        span = 0.1,
+        se = FALSE,
+        size = 2.5,
+        color = "black"
+    ) +
+    theme_minimal() +
+    scale_y_continuous(labels = scales::dollar_format()) +
+    labs(y = "", x = "", title = "Median Home Price Over Time")
+gg_tx_timeseries
+```
+
+
+```{r}
+gg_tx_ridge <- txhousing_tbl %>%
+    drop_na() %>%
+    mutate(city = factor(city) %>% fct_reorder(median) %>% fct_rev()) %>%
+    filter(as.numeric(city) %in% (1:10)) %>%
+    ggplot(aes(x = median, y = fct_rev(city))) +
+    geom_density_ridges(
+        color = "#18BC9C",
+        fill  = "gray10",
+        alpha = 0.75,
+        size  = 1
+    ) +
+    scale_x_continuous(labels = scales::dollar_format()) +
+    theme_minimal() +
+    labs(x = "Median Home Price", y = "", title = "Top 10 Cities by Median Home Price")
+gg_tx_ridge
+```
+
+
+```{r}
+texas_housing_tbl <- txhousing_tbl %>%
+    group_by(city) %>%
+    summarise(median = median(median, na.rm = T)) %>%
+    ungroup() %>%
+    mutate(city = str_to_lower(city))
+
+texas_cities_tbl <- us.cities %>%
+    filter(country.etc == "TX") %>%
+    mutate(name = name %>%
+               str_sub(end = nchar(name) - 3) %>%
+               str_to_lower() %>%
+               str_trim()
+    ) %>%
+    left_join(texas_housing_tbl, by = c("name" = "city"))
+
+texas_outline_tbl <- map_data("state", region = "texas") %>% as_tibble()
+
+gg_tx_map <- texas_cities_tbl %>%
+    drop_na() %>%
+    ggplot(aes(x = long, y = lat, size = median)) +
+    geom_polygon(
+        data  = texas_outline_tbl,
+        aes(x = long, y = lat, group = group, size = NULL),
+        color = "black",
+        size = 1.5,
+        fill = "#18bc9c"
+    ) +
+    geom_point() +
+    geom_text_repel(aes(label = str_to_title(name)), max.overlaps = 5) +
+    # scale_color_viridis_c() +
+    coord_map() +
+    theme_void() +
+    labs(title = "Median Home Prices by City", x = "", y = "") +
+    theme(legend.position = "none")
+
+gg_tx_map
+```
+
+```{r}
+gg_tx_map + (gg_tx_timeseries / gg_tx_ridge) +
+    plot_layout(widths = c(3,2), tag_level = "new") +
+    plot_annotation(
+        title      = "Texas Real-Estate Statistics",
+        subtitle   = "The untold secrets of prime-real estate in the Lonestar State.\n",
+        tag_levels = "A",
+        tag_prefix = "Fig. ",
+        tag_suffix = ":"
+    ) &
+    theme(plot.tag.position = c(0, 1),
+          plot.tag = element_text(size = 8, hjust = 0, vjust = 0))
+```
+
+# 036_ggside
+
+```{r}
+library(ggside)
+library(tidyverse)
+library(tidyquant)
+```
+
+```{r}
+mpg %>%
+    ggplot(aes(hwy, cty, color = class)) +
+    geom_point(size = 2, alpha = 0.3) +
+    geom_smooth(aes(color = NULL), se=TRUE) +
+    geom_xsidedensity(
+        aes(
+            y    = after_stat(density),
+            fill = class
+        ),
+        alpha    = 0.5,
+        size     = 1
+        ,
+        position = "stack"
+    ) +
+    geom_ysidedensity(
+        aes(
+            x    = after_stat(density),
+            fill = class
+        ),
+        alpha    = 0.5,
+        size     = 1
+        ,
+        position = "stack"
+    ) +
+    scale_color_tq() +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(title = "Fuel Economy by Vehicle Type" ,
+         subtitle = "ggside density",
+         x = "Highway MPG", y = "City MPG") +
+    theme(
+        ggside.panel.scale.x = 0.4,
+        ggside.panel.scale.y = 0.4
+    )
+```
+
+```{r}
+mpg %>%
+    ggplot(aes(x = cty, y = hwy, color = class)) +
+    geom_point() +
+    geom_smooth(aes(color = NULL)) +
+    geom_xsideboxplot(
+        alpha    = 0.5,
+        size     = 1
+    ) +
+    scale_color_tq() +
+    scale_fill_tq() +
+    theme_tq() +
+    facet_grid(cols = vars(cyl), scales = "free_x") +
+    labs(
+        title = "Fuel Economy by Engine Size (Cylinders)"
+    ) +
+    theme(
+        ggside.panel.scale.x = 0.4
+    )
+```
+
+# 037_dataeditr
+
+```{r}
+library(DataEditR)
+library(tidyverse)
+library(tidyquant)
+```
+
+```{r}
+mpg_subset <- data_edit(x = mpg)
+```
+
+```{r}
+mpg %>%
+    select(manufacturer, model, cty, hwy, class) %>%
+    pivot_longer(cols = c(cty, hwy)) %>%
+    mutate(
+        model = fct_reorder(
+            str_glue("{manufacturer} {model}") %>% str_to_title(),
+            value
+        ),
+        name = str_to_upper(name)
+    ) %>%
+    ggplot(aes(x = model, y = value, fill = class)) +
+    geom_boxplot() +
+    facet_grid(cols = vars(name), scales = "free_y") +
+    coord_flip() +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(title = "Fuel Economy by Model", y = "MPG", x = "")
+```
+
+# 038_gghalves
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(gghalves)
+```
+
+```{r}
+mpg %>%
+    filter(cyl != 5) %>%
+    mutate(cyl = factor(cyl)) %>%
+    ggplot(aes(cyl, hwy)) +
+    geom_jitter() +
+    theme_tq()
+```
+
+
+```{r}
+mpg %>%
+    filter(cyl != 5) %>%
+    mutate(cyl = factor(cyl)) %>%
+    ggplot(aes(cyl, hwy)) +
+    geom_boxplot(outlier.colour = "red") +
+    theme_tq()
+```
+
+
+```{r}
+mpg %>%
+    filter(cyl != 5) %>%
+    mutate(cyl = factor(cyl)) %>%
+    ggplot(aes(cyl, hwy, color = cyl)) +
+    geom_half_boxplot(outlier.color = "red") +
+    geom_half_dotplot(
+        aes(fill = cyl),
+        dotsize = 0.75,
+        stackratio = 0.5,
+        color = "black"
+    ) +
+    facet_grid(cols = vars(cyl), scales = "free_x") +
+    scale_color_tq() +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(
+        title = "Highway Fuel Economy by Engine Size",
+        subtitle = "Half-Boxplot + Half-Dotplot"
+    )
+```
+
+```{r}
+mpg %>%
+    filter(cyl == 6) %>%
+    ggplot(aes(class, hwy, fill = class)) +
+    geom_boxplot() +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(title = "6 Cylinder Vehicles: Pickup and SUV causing Bi-Modal Relationship")
+```
+
+```{r}
+mpg %>%
+    filter(cyl == 6) %>%
+    ggplot(aes(class, hwy, fill = class)) +
+    geom_half_boxplot(
+        outlier.colour = "red"
+    ) +
+    geom_half_dotplot(
+        aes(fill = class),
+        dotsize = 0.75,
+        stackratio = 0.5,
+        color = "black"
+    ) +
+    scale_color_tq() +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(title = "6 Cylinder Vehicles: Pickup and SUV causing Bi-Modal Relationship")
+```
+
+# 039_grafify
+
+```{r}
+library(tidyverse)
+library(grafify)
+```
+
+```{r}
+mpg %>%
+    plot_scatterbar_sd(cyl, hwy)
+```
+
+```{r}
+mpg %>%
+    plot_scatterbox(cyl, hwy, jitter = 0.2, s_alpha = 0.5)
+```
+
+```{r}
+mpg %>%
+    plot_dotviolin(cyl, hwy, dotsize = 0.4, ColPal = "bright")
+```
+
+```{r}
+mpg %>%
+    plot_3d_scatterbox(cyl, hwy, class, s_alpha = 0)
+```
+
+```{r}
+mpg %>%
+    group_by(model, year) %>%
+    summarize(mean_hwy = mean(hwy)) %>%
+    ungroup() %>%
+    plot_befafter_colors(year, mean_hwy, model)
+```
+
+# 040_modeltime_forecasting
+
+```{r}
+library(modeltime)
+library(tidymodels)
+library(tidyverse)
+library(timetk)
+library(lubridate)
+```
+
+```{r}
+bike_sharing_daily
+data <- bike_sharing_daily %>%
+    select(dteday, cnt)
+data %>% plot_time_series(dteday, cnt)
+```
+
+```{r}
+splits <- time_series_split(
+    data,
+    assess     = "3 months",
+    cumulative = TRUE
+)
+splits %>%
+    tk_time_series_cv_plan() %>%
+    plot_time_series_cv_plan(dteday, cnt)
+```
+
+```{r}
+model_arima <- arima_reg() %>%
+    set_engine("auto_arima") %>%
+    fit(cnt ~ dteday, training(splits))
+model_arima
+```
+
+```{r}
+model_prophet <- prophet_reg(
+        seasonality_yearly = TRUE
+    ) %>%
+    set_engine("prophet") %>%
+    fit(cnt ~ dteday, training(splits))
+model_prophet
+```
+
+```{r}
+model_glmnet <- linear_reg(penalty = 0.01) %>%
+    set_engine("glmnet") %>%
+    fit(
+        cnt ~ wday(dteday, label = TRUE)
+            + month(dteday, label = TRUE)
+            + as.numeric(dteday),
+        training(splits)
+    )
+model_glmnet
+```
+
+```{r}
+model_tbl <- modeltime_table(
+    model_arima,
+    model_prophet,
+    model_glmnet
+)
+calib_tbl <- model_tbl %>%
+    modeltime_calibrate(testing(splits))
+calib_tbl %>% modeltime_accuracy()
+```
+
+```{r}
+calib_tbl %>%
+    modeltime_forecast(
+        new_data    = testing(splits),
+        actual_data = data
+    ) %>%
+    plot_modeltime_forecast()
+```
+
+```{r}
+future_forecast_tbl <- calib_tbl %>%
+    modeltime_refit(data) %>%
+    modeltime_forecast(
+        h           = "3 months",
+        actual_data = data
+    )
+future_forecast_tbl %>%
+    plot_modeltime_forecast()
+```
+
+# 041_easystats_performance
+
+```{r}
+library(tidyverse)
+library(performance)
+library(tidymodels)
+```
+
+```{r, fig.width=15, fig.height=8}
+model_lm <- lm(hwy ~ displ + class, data = mpg)
+model_lm
+check_model(model_lm)
+```
+
+
+```{r, fig.width=15, fig.height=8}
+model_lm_tidy <- linear_reg() %>%
+    set_engine("lm") %>%
+    fit(hwy ~ displ + class, data = mpg)
+check_model(model_lm_tidy)
+```
+
+# 042_raincloud_plots
+
+```{r}
+library(ggdist)
+library(tidyquant)
+library(tidyverse)
+```
+
+```{r}
+mpg %>%
+    filter(cyl %in% c(4,6,8)) %>%
+    ggplot(aes(x = factor(cyl), y = hwy, fill = factor(cyl))) +
+    # add half-violin from {ggdist} package
+    ggdist::stat_halfeye(
+        ## custom bandwidth
+        adjust = 0.5,
+        ## move geom to the right
+        justification = -.2,
+        ## remove slab interval
+        .width = 0,
+        point_colour = NA
+    ) +
+    geom_boxplot(
+        width = .12,
+        ## remove outliers
+        outlier.color = NA,
+        alpha = 0.5
+    ) +
+    # Add dot plots from {ggdist} package
+    ggdist::stat_dots(
+        ## orientation to the left
+        side = "left",
+        ## move geom to the left
+        justification = 1.1,
+        ## adjust grouping (binning) of observations
+        binwidth = .25
+    ) +
+    # Adjust theme
+    scale_fill_tq() +
+    theme_tq() +
+    labs(
+        title = "Raincloud Plot",
+        subtitle = "Showing the Bi-Modal Distribution of 6 Cylinder Vehicles",
+        x = "Engine Size (No. of Cylinders)",
+        y = "Highway Fuel Economy (MPG)",
+        fill = "Cylinders"
+    ) +
+    coord_flip()
+```
+
+# 043_hull_plots
+
+```{r}
+library(ggforce)
+library(tidyquant)
+library(tidyverse)
+```
+
+```{r}
+g1 <- mpg %>%
+    mutate(engine_size = str_c("Cylinder: ", cyl)) %>%
+    ggplot(aes(displ, hwy)) +
+    geom_point()
+g1
+```
+
+```{r}
+g2 <- g1 +
+    geom_mark_hull(
+        aes(fill = engine_size, label = engine_size),
+        concavity = 2.8
+    )
+g2
+```
+
+```{r}
+g3 <- g2 +
+    geom_smooth(se = FALSE, span = 1.0) +
+    expand_limits(y = 50) +
+    theme_tq() +
+    scale_fill_tq() +
+    labs(
+        title = "Fuel Economy (MPG) Trends by Engine Size and Displacement",
+        subtitle = "Hull plot to indicate clusters / group assignment",
+        y = "Highway Fuel Economy (MPG)",
+        x = "Engine Displacement Volume (Liters)",
+        fill = "",
+        caption = "Engine size has a negative relationship to fuel economy."
+    )
+g3
+```
+
+# 044_dumbell_plots
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(ggalt)
+```
+
+```{r}
+mpg_by_year_tbl <- mpg %>%
+    select(hwy, year, model, class) %>%
+    pivot_wider(
+        names_from   = year,
+        values_from  = hwy,
+        id_cols      = c(class, model),
+        values_fn    = function(x) mean(x, na.rm = TRUE),
+        names_prefix = "year_"
+    ) %>%
+    mutate(model = fct_reorder(model, year_2008)) %>%
+    drop_na()
+mpg_by_year_tbl
+```
+
+```{r}
+g1 <- mpg_by_year_tbl %>%
+    ggplot(aes(x = year_1999, xend = year_2008, y = model, group = model)) +
+    geom_dumbbell(
+        colour="#a3c4dc",
+        colour_xend="#0e668b",
+        size=4.0,
+        dot_guide=TRUE,
+        dot_guide_size=0.15,
+        dot_guide_colour = "grey60"
+    )
+g1
+```
+
+
+```{r}
+g2 <- g1 +
+    labs(
+        title = "Change Vehicle Fuel Economy between 1999 and 2008",
+        x="Fuel Economy (MPG)", y = "Vehicle Model"
+    ) +
+    theme_tq() +
+    theme(
+        panel.grid.minor=element_blank(),
+        panel.grid.major.y=element_blank(),
+        panel.grid.major.x=element_line(),
+        axis.ticks=element_blank(),
+        panel.border=element_blank()
+
+    )
+g2
+```
+
+# 045_lollipop_plots
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(ggalt)
+```
+
+
+```{r}
+mpg_by_class_tbl <- mpg %>%
+    select(hwy, model, class) %>%
+    group_by(class) %>%
+    summarise(mean_hwy = mean(hwy, na.rm = TRUE)) %>%
+    ungroup() %>%
+    mutate(class = fct_reorder(class, mean_hwy))
+mpg_by_class_tbl
+```
+
+
+```{r}
+g1 <- mpg_by_class_tbl %>%
+    ggplot(aes(x = mean_hwy, y = class)) +
+    geom_lollipop(
+        horizontal   = TRUE,
+        point.colour = "dodgerblue",
+        point.size   = 10,
+        color        = "#2c3e50",
+        size         = 1
+    )
+g1
+```
+
+
+```{r}
+g2 <- g1 +
+    geom_label(
+        aes(label = str_glue("Vehicle Class: {toupper(class)}
+                             mpg: {round(mean_hwy)}")),
+        size    = 3,
+        hjust   = "outward",
+        nudge_x = 2
+    ) +
+    expand_limits(x = 45) +
+    labs(
+        title = "Vehicle Fuel Economy Lollipop Plot",
+        x="Fuel Economy (MPG)", y = "Vehicle Class"
+    ) +
+    theme_tq() +
+    theme(
+        panel.grid.minor=element_blank(),
+        panel.grid.major.y=element_blank(),
+        panel.grid.major.x=element_line(),
+        axis.ticks=element_blank(),
+        panel.border=element_blank()
+
+    )
+g2
+```
+
+# 046_furrr_parallel_processing
+
+```{r}
+library(tidyverse)
+library(timetk)
+library(lubridate)
+library(furrr)
+library(tictoc)
+```
+
+```{r}
+sales_data_tbl <- walmart_sales_weekly %>%
+    select(id, Date, Weekly_Sales) %>%
+    set_names(c("id", "date", "value"))
+sales_data_tbl
+```
+
+
+```{r}
+tic()
+sales_data_tbl %>%
+    nest(data = c(date, value)) %>%
+    mutate(model = map(data, function(df) {
+        Sys.sleep(1)
+        lm(value ~ month(date) + as.numeric(date), data = df)
+    }))
+toc()
+```
+
+
+```{r}
+plan(multisession, workers = 6)
+tic()
+sales_data_tbl %>%
+    nest(data = c(date, value)) %>%
+    mutate(model = future_map(data, function(df) {
+        Sys.sleep(1)
+        lm(value ~ month(date) + as.numeric(date), data = df)
+    }))
+toc()
+```
+
+# 047_customer_heatmap
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+```
+
+```{r}
+sales_by_customer_tbl <- read_rds("047_customer_heatmap/sales_by_customer.rds")
+sales_by_customer_tbl
+```
+
+```{r}
+prop_sales_by_customer_tbl <- sales_by_customer_tbl %>%
+    group_by(bikeshop_name) %>%
+    mutate(prop = quantity / sum(quantity)) %>%
+    ungroup() %>%
+    select(-quantity) %>%
+    pivot_wider(
+        id_cols     = bikeshop_name,
+        names_from  = product_category,
+        values_from = prop
+    ) %>%
+    arrange(-`Elite Road`) %>%
+    mutate(bikeshop_name = fct_reorder(bikeshop_name, `Elite Road`)) %>%
+    pivot_longer(
+        cols      = -bikeshop_name,
+        names_to  = "product_category",
+        values_to = "prop"
+    )
+prop_sales_by_customer_tbl
+```
+
+```{r, fig.width=15, fig.height=8}
+prop_sales_by_customer_tbl %>%
+    ggplot(aes(product_category, bikeshop_name)) +
+    geom_tile(aes(fill = prop)) +
+    geom_text(aes(label = scales::percent(prop, accuracy = 1)), size = 3) +
+    scale_fill_gradient(low = "white", high = palette_light()[1]) +
+    labs(
+        title = "Heatmap of Customer Purchasing Habits",
+        subtitle = "Used to investigate Customer Similarity",
+        x = "Bike Type (Product Category)",
+        y = "Bikeshop (Customer)"
+    ) +
+    theme_tq() +
+    theme(
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.position = "none",
+        plot.title = element_text(face = "bold"),
+        plot.subtitle = element_text(face = "bold.italic")
+    )
+```
+
+# 048_radiant
+
+```{r}
+library(radiant)
+library(timetk)
+```
+
+```{r}
+data(walmart_sales_weekly)
+radiant()
+```
+
+
+# 049_modelstudio
+
+```{r}
+library(modelStudio)
+library(DALEX)
+library(tidyverse)
+library(tidymodels)
+```
+
+```{r}
+data_tbl <- mpg %>%
+    select(hwy, manufacturer:drv, fl, class)
+fit_xgboost <- boost_tree(learn_rate = 0.3) %>%
+    set_mode("regression") %>%
+    set_engine("xgboost") %>%
+    fit(hwy ~ ., data = data_tbl)
+fit_xgboost
+```
+
+```{r}
+explainer <- DALEX::explain(
+    model = fit_xgboost,
+    data  = data_tbl,
+    y     = data_tbl$hwy,
+    label = "XGBoost"
+)
+modelStudio::modelStudio(explainer)
+```
+
