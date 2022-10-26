@@ -2243,7 +2243,6 @@ data(walmart_sales_weekly)
 radiant()
 ```
 
-
 # 049_modelstudio
 
 ```{r}
@@ -2271,5 +2270,538 @@ explainer <- DALEX::explain(
     label = "XGBoost"
 )
 modelStudio::modelStudio(explainer)
+```
+
+# 050_trelliscope
+
+```{r}
+library(tidyverse)
+library(plotly)
+library(trelliscopejs)
+```
+
+```{r}
+mpg %>%
+    ggplot(aes(displ, hwy)) +
+    geom_point(size = 4) +
+    geom_smooth(se = FALSE, span = 1) +
+    facet_trelliscope(
+        ~ manufacturer,
+        ncol      = 4,
+        nrow      = 3
+    )
+```
+
+
+```{r}
+mpg %>%
+    ggplot(aes(displ, hwy)) +
+    geom_point() +
+    geom_smooth(se = FALSE, span = 1) +
+    facet_trelliscope(
+        ~ manufacturer,
+        ncol      = 4,
+        nrow      = 3,
+        as_plotly = TRUE
+    )
+```
+
+# 051_survival_plots
+
+```{r}
+library(tidyverse)
+library(janitor)
+library(tidyquant)
+library(patchwork)
+library(survival)
+library(survminer)
+```
+
+```{r}
+customer_churn_tbl <- read_csv("051_survival_plots/customer_churn.csv") %>%
+    clean_names() %>%
+    mutate(churn = ifelse(churn == "Yes", 1, 0)) %>%
+    mutate_if(is.character, as_factor)
+customer_churn_tbl
+```
+
+```{r}
+sfit_2 <- survfit(Surv(tenure, churn) ~ contract, data = customer_churn_tbl)
+g1 <- ggsurvplot(
+    sfit_2,
+    conf.int = TRUE,
+    data     = customer_churn_tbl
+)
+g1
+```
+
+```{r}
+g1$plot
+g1$plot +
+    theme_tq() +
+    scale_fill_tq() +
+    scale_color_tq() +
+    labs(title = "Customer Churn Survival Plot")
+```
+
+
+```{r}
+g2 <- ggsurvplot(
+    sfit_2,
+    conf.int = TRUE,
+    data     = customer_churn_tbl,
+    risk.table = TRUE
+)
+g2_plot <- g2$plot +
+    theme_tq() +
+    scale_fill_tq() +
+    scale_color_tq() +
+    labs(
+        title = "Customer Churn Survival Plot"
+    )
+g2_table <- g2$table +
+    theme_tq() +
+    scale_fill_tq() +
+    scale_color_tq() +
+    theme(panel.grid = element_blank())
+g2_plot / g2_table + plot_layout(heights = c(2,1))
+```
+
+```{r}
+g3 <- ggsurvplot_facet(
+    sfit_2,
+    conf.int = TRUE,
+    data     = customer_churn_tbl,
+    facet.by = "gender",
+    nrow     = 1
+)
+g3 +
+    theme_tq() +
+    scale_fill_tq() +
+    scale_color_tq() +
+    labs(title = "Survival Plot by Customer Gender")
+```
+
+# 052_modeldown
+
+```{r}
+library(tidyverse)  # Core
+library(janitor)    # Clean names
+library(tidymodels) # Modeling
+library(DALEX)      # Explainer
+library(modelDown)  # Explainable AI Report
+```
+
+```{r}
+customer_churn_tbl <- read_csv("051_survival_plots/customer_churn.csv") %>%
+    clean_names() %>%
+    mutate_if(is.character, as_factor)
+customer_churn_tbl
+```
+
+```{r}
+recipe_spec <- recipe(churn ~ ., data = customer_churn_tbl) %>%
+    step_rm(customer_id) %>%
+    step_dummy(all_nominal_predictors(), one_hot = TRUE)
+recipe_spec %>% prep() %>% bake(customer_churn_tbl)
+```
+
+```{r}
+model_spec <- rand_forest(
+        mode = "classification",
+        mtry = 4
+    ) %>%
+    set_engine(engine = "randomForest")
+wflw_fit_rf <- workflow() %>%
+    add_recipe(recipe_spec) %>%
+    add_model(model_spec) %>%
+    fit(customer_churn_tbl)
+wflw_fit_rf %>% predict(customer_churn_tbl)
+wflw_fit_rf %>%
+    predict(customer_churn_tbl, type = "prob") %>%
+    pull(2)
+```
+
+
+```{r}
+pred_func <- function(model, newdata) {
+    predict(model, newdata, type = "prob") %>% pull(2)
+}
+
+pred_func(wflw_fit_rf, head(customer_churn_tbl))
+
+explain_rf <- explain(
+    model            = wflw_fit_rf,
+    data             = customer_churn_tbl %>% select(-churn),
+    y                = as.numeric(customer_churn_tbl$churn),
+    predict_function = pred_func,
+    label            = "Random Forest"
+)
+
+modelDown::modelDown(
+    explain_rf,
+    modules       = c("variable_importance", "variable_response"),
+    output_folder = "052_modeldown/output"
+)
+
+```
+
+# 053_ggdensity
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+library(ggdensity)
+```
+
+```{r}
+mpg %>%
+    ggplot(aes(displ, hwy, fill = class)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_tq() +
+    theme_tq()
+```
+
+```{r, fig.width=15, fig.height=8}
+g1 <- mpg %>%
+    ggplot(aes(displ, hwy, fill = class)) +
+    geom_hdr(probs = c(0.9, 0.5)) +
+    geom_point(shape = 21, size = 3) +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(title = "High Density Regions")
+g1 + facet_wrap(~ class, ncol = 2)
+```
+
+```{r, fig.width=15, fig.height=8}
+g2 <- mpg %>%
+    ggplot(aes(displ, hwy, fill = class)) +
+    geom_hdr_lines(
+        aes(color = after_stat(probs)),
+        probs = c(0.9, 0.6),
+        alpha = 1
+    ) +
+    geom_point(shape = 21, size = 2) +
+    scale_color_tq() +
+    scale_fill_tq() +
+    theme_tq() +
+    labs(title = "High Density Lines") +
+    expand_limits(y = c(10, 60), x = c(0, 8))
+g2 + facet_wrap(~ class)
+```
+
+# 054_explore
+
+```{r}
+library(tidyverse)
+library(explore)
+```
+
+```{r}
+mpg %>% explore()
+mpg %>% select(-cty) %>% explore()
+```
+
+```{r}
+mpg %>% describe_all()
+mpg %>% describe_cat(manufacturer)
+```
+
+```{r, fig.width=15, fig.height=8}
+mpg %>%
+    explore_all(
+        target = hwy,
+        ncol   = 3
+    )
+```
+
+```{r}
+mpg %>%
+    explore(
+        target = hwy,
+        var    = hwy,
+        var2   = manufacturer
+    )
+```
+
+```{r}
+mpg %>%
+    report(
+        target      = hwy,
+        output_dir  = "054_explore/",
+        output_file = "explore_plots.html"
+    )
+```
+
+# 055_ggradar
+
+```{r}
+library(ggradar)
+library(tidyverse)
+library(tidyquant)
+library(scales)
+library(corrr)
+```
+
+```{r}
+vehicle_summary_tbl <- mpg %>%
+    select(class, where(is_numeric), -year) %>%
+    # Median Values By Vehicle Class
+    group_by(class) %>%
+    summarise(
+        across(displ:hwy, .fns = median)
+    ) %>%
+    ungroup() %>%
+    # Prep for ggradar (make sure to scale to 0-1)
+    rename(group = class) %>%
+    mutate_at(vars(-group), rescale)
+vehicle_summary_tbl
+```
+
+
+```{r}
+vehicle_summary_tbl %>% ggradar()
+```
+
+```{r}
+vehicle_summary_tbl %>%
+    ggradar(
+        group.colours    = palette_light() %>% unname(),
+        group.point.size = 0,
+        group.line.width = 1,
+        plot.title       = "MPG Comparison By Vehicle Class",
+        fill             = TRUE,
+        fill.alpha       = 0.25
+    )
+```
+
+```{r, fig.width=15, fig.height=8}
+vehicle_summary_tbl %>%
+    ggradar(
+        group.colours = palette_light() %>% unname(),
+        fill          = TRUE,
+        fill.alpha    = 0.25
+    ) +
+    # Facet
+    facet_wrap(~ group, ncol = 3) +
+    # Theme
+    theme_void() +
+    scale_color_tq() +
+    theme(
+        strip.text = element_text(
+            size   = 12,
+            colour = "white",
+            margin = margin(t = 5, b = 5)
+        ),
+        strip.background = element_rect(fill = "#2C3E50"),
+        legend.position = "none",
+        plot.margin = margin(10, 10, 10, 10)
+    ) +
+    # Title
+    labs(title = "MPG Comparison By Vehicle Class")
+```
+
+```{r}
+# * Get Vehicle Similarity ----
+vehicle_similarity_tbl <- vehicle_summary_tbl %>%
+    # Transpose
+    pivot_longer(cols = -1) %>%
+    pivot_wider(
+        names_from  = group,
+        values_from = value
+    ) %>%
+    # Correlate and Arrange
+    corrr::correlate() %>%
+    mutate(across(where(is.numeric), .fns = ~ replace_na(., 1))) %>%
+    arrange(`2seater`)
+vehicle_similarity_tbl
+```
+
+```{r}
+# * Reorder By Similarity ----
+vehicle_summary_tbl %>%
+    mutate(group = factor(group, levels = vehicle_similarity_tbl$term)) %>%
+    ggradar(
+        group.colours    = palette_light() %>% unname(),
+        group.point.size = 0,
+        group.line.width = 1,
+        fill             = TRUE,
+        fill.alpha       = 0.25,
+        grid.label.size  = 4
+    ) +
+    facet_wrap(~ group, ncol = 3) +
+    scale_color_tq() +
+    labs(title = "Vehicle Classes Arranged By Similarity") +
+    theme(
+        legend.position  = "none",
+        strip.background = element_rect(fill = "#2C3E50"),
+        strip.text       = element_text(color = "white")
+    )
+```
+
+# 056_dual_yaxis_ggplot
+
+```{r}
+library(tidyverse)
+library(tidyquant)
+```
+
+```{r}
+mpg_summarized_tbl <- mpg %>%
+    select(-year) %>%
+    group_by(class) %>%
+    summarise(
+        across(
+            .cols  = where(is.numeric),
+            .fns   = median,
+            .names = "{.col}_median"
+        ),
+        count = n()
+    ) %>%
+    ungroup() %>%
+    mutate(
+        prop       = count / sum(count),
+        all_groups = "all_groups",
+        class      = fct_reorder(class, prop)
+    )
+mpg_summarized_tbl
+```
+
+
+```{r}
+mpg_summarized_tbl %>%
+    ggplot(aes(x = class)) +
+    geom_col(aes(y = prop)) +
+    geom_label(aes(
+        y     = prop,
+        label = str_glue("{scales::percent(prop)}")
+    )) +
+    geom_line(aes(y = hwy_median, group = all_groups)) +
+    geom_point(aes(y = hwy_median, group = all_groups))
+```
+
+```{r}
+transformer_dual_y_axis <- function(data,
+                                    primary_column, secondary_column,
+                                    include_y_zero = FALSE) {
+    # PARAMETER SETUP
+    params_tbl <- data %>%
+        summarise(
+            max_primary   = max(!! enquo(primary_column)),
+            min_primary   = min(!! enquo(primary_column)),
+            max_secondary = max(!! enquo(secondary_column)),
+            min_secondary = min(!! enquo(secondary_column))
+        )
+    if (include_y_zero) {
+        params_tbl$min_primary   <- 0
+        params_tbl$min_secondary <- 0
+    }
+    params_tbl <- params_tbl %>%
+        mutate(
+            scale = (max_secondary - min_secondary) / (max_primary - min_primary),
+            shift = min_primary - min_secondary
+        )
+    # MAKE SCALER FUNCTIONS
+    scale_func <- function(x) {
+        x * params_tbl$scale - params_tbl$shift
+    }
+    inv_func <- function(x) {
+        (x + params_tbl$shift) / params_tbl$scale
+    }
+    # RETURN
+    ret <- list(
+        scale_func = scale_func,
+        inv_func   = inv_func,
+        params_tbl = params_tbl
+    )
+    return(ret)
+}
+
+# * Make A Y-Axis Transformer ----
+transformer <- mpg_summarized_tbl %>%
+    transformer_dual_y_axis(
+        primary_column   = prop,
+        secondary_column = hwy_median,
+        include_y_zero   = TRUE
+    )
+
+# * How the transformer works... ----
+mpg_summarized_tbl %>%
+    pull(hwy_median) %>%
+    transformer$inv_func() %>%
+    transformer$scale_func()
+```
+
+```{r}
+g1 <- mpg_summarized_tbl %>%
+    ggplot(aes(x = class)) +
+    geom_col(
+        aes(y = prop, fill = "Vehicle Proportion (%)"),
+        alpha = 0.9
+    ) +
+    geom_label(
+        aes(
+            y     = prop,
+            label = str_glue("{scales::percent(prop)}"),
+            color = "Vehicle Proportion (%)"
+        )
+    )
+g1
+```
+
+```{r}
+g2 <- g1 +
+    geom_line(
+        aes(
+            y     = transformer$inv_func(hwy_median),
+            group = all_groups,
+            color = "Highway MPG"
+        ),
+        size = 1
+    ) +
+    geom_point(
+        aes(
+            y     = transformer$inv_func(hwy_median),
+            group = all_groups,
+            color = "Highway MPG"
+        ),
+        size = 5
+    ) +
+    geom_label(
+        aes(
+            y     = transformer$inv_func(hwy_median),
+            label = str_glue("{hwy_median} mpg"),
+            color = "Highway MPG"
+        ),
+        size = 3,
+        nudge_y = 0.008
+    ) +
+    scale_y_continuous(
+        labels   = scales::percent_format(),
+        name     = "Vehicle Proportion (%)",
+        sec.axis = sec_axis(
+            trans = ~ transformer$scale_func(.),
+            name  = "Highway MPG"
+        )
+    ) +
+    expand_limits(y = c(0,0.30))
+g2
+```
+
+```{r}
+g3 <- g2 +
+    theme_tq() +
+    scale_color_manual(values = c(
+        palette_light()[["red"]],
+        palette_light()[["blue"]]
+    )) +
+    scale_fill_manual(values = palette_light()[["blue"]]) +
+    theme(
+        legend.position    = "none",
+        axis.title.y.right = element_text(color = palette_light()[["red"]]),
+        axis.text.y.right  = element_text(color = palette_light()[["red"]])
+    ) +
+    labs(title = "Dual Y-Axis Plot: Vehicle Class Proportion vs Fuel Economy")
+g3
 ```
 
