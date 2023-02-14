@@ -1,0 +1,73 @@
+---
+title: "Untitled"
+output: html_document
+date: '2023-02-14'
+---
+
+```{r}
+library(httr)
+library(tidyverse)
+```
+
+
+```{r}
+# 构造请求头
+myCookie <- 'nts_mail_user=liuyifeikim@163.com:-1:1; _ntes_nnid=0cfe5922cbe1a21e1737f9024e5efec7,1661183598250; _ntes_nuid=0cfe5922cbe1a21e1737f9024e5efec7; __bid_n=183aaeaaf073d4c7854207; NTES_CMT_USER_INFO=477526761|有态度网友0stDHF|http://cms-bucket.nosdn.127.net/2018/08/13/078ea9f65d954410b62a52ac773875a1.jpeg|false|bG1mMjRoZXJic0AxMjYuY29t; FEID=v10-0a3d783d541750919e223513dcdf5323c29b9185; __xaf_fpstarttimer__=1671448858282; __xaf_thstime__=1671448860161; __xaf_fptokentimer__=1671448860268; FPTOKEN=F4USBBRQ/zoOIU/38WMoPHchwBm9eNtHAbzUXdBDT9r9d5dlz383cSrB4gVoriQ+YJhoGtNnGxcdSJoC2zHZg6XqjWDARlNQfKNOXeFaiKkCbVjXQmO2YzlI/ddKD9hXZydJGFkhhuI9w/Bz65CP8kXajycYIVIaNFfzQQLLKLwIrSgCAJcJb/lRFPPKAkxUrUfMqouCPPK0F9m9acHLQCmEteStcxZITY0tq97RdofUiNyiLWcLWPK6yVmL8U759cenjlFvK+2M/Xciw4ndPAQQhi9DbPeAZAtd/uBcc/3qWjqCvBHncgnXR8LQKfAZT+Ykval64DVeHlDNZPNRZcwzSfGy5dFmaZcmjou1rKp0XRyrgXz0goD/ihFfEGIgHAj53bntgOo2nZGk6hy+mQ==|BxwnV4/G22yRxdJXivrd+www9qPJAwiJ60cJ8Ele1V0=|10|6869e5f6f72ba7f42cff90fd7bbd8095; NTESSTUDYSI=e4441e8a9f954876b112e77888f4f62e; EDUWEBDEVICE=6c9230549a484a4c8c4d01735882adb1; utm=eyJjIjoiIiwiY3QiOiIiLCJpIjoiIiwibSI6IiIsInMiOiIiLCJ0IjoiIn0=|aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8=; eds_utm=eyJjIjoiIiwiY3QiOiIiLCJpIjoiIiwibSI6IiIsInMiOiIiLCJ0IjoiIn0=|aHR0cHM6Ly93d3cuZ29vZ2xlLmNvbS8=; EDU-YKT-MODULE_GLOBAL_PRIVACY_DIALOG=true; NTES_P_UTID=LgBJ5CCdalwhZ1vbzARPxc2GPzLy00Tw|1676382666; STUDY_MIND_TELBIND=1; NETEASE_WDA_UID=1023963041#|#1486270336172; NTES_STUDY_YUNXIN_ACCID=s-1023963041; NTES_STUDY_YUNXIN_TOKEN=dccf21c460d318c615092b374ac6d2f5; NTES_YD_SESS=8a29dNp7OEurHMf1gvF8XFZv0Kke4YKAhHUWpcmOALJK5EnP5.MfeY0sohc59scyOvsD.7_l_QIWGDT3yNsvZbKR7sphZCm_nlLlUYAjmPl1OhRdYD_K5.GZCJfVqBugpGMPSpW8LeSlUyoiKPUYE7vo.qovRmA1xqRvZCdps3CJYvcAc3yo29Ax3NNUaNejHsQTTl087HDRBj.QssclKf3VJSL71qF9N; S_INFO=1676382688|0|0&60##|13380000297; P_INFO=13380000297|1676382688|1|study|00&99|null&null&null#gud&440100#10#0|&0||13380000297; DICT_SESS=v2|UYMfTO_zoRlGhM6L6MJ4RzWRLQS0HkA0Pz64TyhLYfROMOLYmOLpy0puPLOmhfU50wS0MUf0HlfRlEO4zMhMUE0gy0HOfOLTB0; DICT_LOGIN=1||1676382688358; STUDY_PERSIST="5PmS1f5QIDEBN4W9+ubfWCaM6IvmYVfavNUc8cTMb+v1jK1m3HYvf3ZMvr8IbcHwqQFOougdExwBqFBbC8J7PUcXMqzU7Yfz7cwH8Nx1Yfo4dmGzz474HfcWUP6beGDASAKhIoJCSg5AS+fd4kkAV48/UlanQ3TWx3SqESAIMYC9k+E1fFTSx0a7YKkAGXQvPnp5MiJl2pHpgrwuwNTAIQCGC0iimverSLRHhO+QJCK4O37o114A2CfwwSf8PMla8WQLi3xTJ45sq/acjsEWiA=="; STUDY_SESS="h7ViKU9L6abLb9rO9P8zhkFg2sTYUAYMlynUmT3sbDV6tqb9Gsj7hSqSfK/czkWZyyWyxqoc5aY/S0q9Ub8vri4jZhjVFWOrGfCLoetHORSx6q6UDilb2NADn7ghKrYm+qXCPowgQQNJSmEXctuFQiIcua7goSUCKGFNTzTFTMpg/5heS/UbSOMAdXexUirM8sSottwTAP9K3JYamEC6W/FkC4t8UyeObKv2nI7BFog="; STUDY_INFO="urs-phoneyd.d441b3180f0d43df8@163.com|95|1023963041|1676382688622"; hb_MA-BFF5-63705950A31C_source=study.youdao.com; STUDY_UUID=54eafcde-17f7-48a1-b824-4e7e7e782793'
+myUserAgent <- 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36'
+headers <- c('accept' = 'application/json',
+             'edu-script-token' = 'e4441e8a9f954876b112e77888f4f62e',
+             'User-Agent' = myUserAgent,
+             'cookie' = myCookie)
+
+# 二次实际请求到的url
+url <- 'https://study.163.com/p/search/studycourse.json'
+
+# 构造请求Payload
+payload <- list('pageIndex' = 1,
+                'pageSize' = 50,
+                'relativeOffset' = 0,
+                'frontCategoryId' = '400000001334002')
+```
+
+```{r}
+# POST方法执行单次请求
+result <- POST(url, add_headers(.headers = headers), body = payload, encode = 'json')
+result
+```
+```{r}
+lessons <- content(result)$result$list
+df <- tibble(ID = map_chr(lessons, "courseId"),
+             title = map_chr(lessons, "productName"),
+             provider = map_chr(lessons, "provider"),
+             score = map_dbl(lessons, "score"),
+             learnerCount = map_dbl(lessons, "learnerCount"),
+             lessonCount = map_dbl(lessons, "lessonCount"),
+             lector = map_chr(lessons, "lectorName", .null = NA)
+             )
+df
+```
+
+```{r}
+# 构造函数
+get_html <- function(p){
+  Sys.sleep(sample(5, 1))
+  payload = list('pageIndex' = p, 'pageSize' = 50, 'relativeOffset' = 50 * (p - 1), 'frontCategoryId' = '400000001334002')
+  result = POST(url, add_headers(.headers = headers), body = payload, encode = 'json')
+  lessons <- content(result)$result$list
+  df <- tibble(ID = map_chr(lessons, "courseId", .null = NA),
+               title = map_chr(lessons, "productName", .null = NA),
+               provider = map_chr(lessons, "provider", .null = NA),
+               score = map_dbl(lessons, "score", .null = NA),
+               learnerCount = map_dbl(lessons, "learnerCount", .null = NA),
+               lessonCount = map_dbl(lessons, "lessonCount", .null = NA),
+               lector = map_chr(lessons, "lectorName", .null = NA)
+               )
+}
+```
+
+```{r}
+# 爬取数据
+wy_lessons <- map_dfr(1:20, get_html)
+wy_lessons %>% arrange(-learnerCount)
+```
+
